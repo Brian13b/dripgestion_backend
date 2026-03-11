@@ -15,7 +15,7 @@ def read_clientes(db: Session = Depends(get_db), skip: int = 0, limit: int = 100
 @router.post("", response_model=schemas.ClienteResponse)
 def create_cliente(cliente_in: schemas.ClienteCreate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
     try:
-        return cliente_service.crear_cliente_y_usuario(db, cliente_in, current_user.tenant_id)
+        return cliente_service.crear_cliente_con_acceso(db, cliente_in, current_user.tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
