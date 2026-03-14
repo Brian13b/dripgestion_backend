@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -12,9 +12,9 @@ from app.services import auth_service
 router = APIRouter()
 
 @router.post("/login/access-token", response_model=schemas.Token)
-def login_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
+def login_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends(), x_tenant_id: int = Header(..., alias="X-Tenant-ID")) -> Any:
     try:
-        user = auth_service.autenticar_usuario(db, form_data.username, form_data.password)
+        user = auth_service.autenticar_usuario(db, form_data.username, form_data.password, x_tenant_id)
         return auth_service.generar_token_acceso(user.id)
     except ValueError as e:
         status_code = status.HTTP_400_BAD_REQUEST if "inactivo" in str(e) else status.HTTP_401_UNAUTHORIZED

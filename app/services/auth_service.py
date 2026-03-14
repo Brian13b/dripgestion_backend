@@ -4,11 +4,11 @@ from app.core import security
 from app.core.config import settings
 from app.crud import crud_user
 
-def autenticar_usuario(db: Session, username: str, password: str):
-    user = crud_user.get_user_by_username(db, username=username)
+def autenticar_usuario(db: Session, username: str, password: str, tenant_id: int):
+    user = crud_user.get_user_by_username(db, username=username, tenant_id=tenant_id)
     
     if not user or not security.verify_password(password, user.hashed_password):
-        raise ValueError("Usuario o contraseña incorrectos")
+        raise ValueError("Credenciales incorrectas para esta empresa")
         
     if not user.is_active:
         raise ValueError("Usuario inactivo")

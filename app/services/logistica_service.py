@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import date
 from app.schemas.logistica import MovimientoCreate, PagoManualCreate
@@ -26,6 +27,8 @@ def registrar_entrega(db: Session, mov_in: MovimientoCreate, tenant_id: int):
     deuda_generada = mov_in.monto_total - mov_in.monto_cobrado
     cliente.saldo_dinero += deuda_generada
 
+    db.add(cliente)
+           
     mov_data = {
         "tenant_id": tenant_id,
         "cliente_id": mov_in.cliente_id,
@@ -91,9 +94,16 @@ def obtener_historial_dia(db: Session, fecha: date, tenant_id: int):
 def obtener_resumen_mes(db: Session, tenant_id: int):
     hoy = date.today()
     movimientos = crud_logistica.get_movimientos_mes(db, hoy.month, hoy.year, tenant_id)
-    
+
     efectivo = sum(m.monto_cobrado for m in movimientos if m.metodo_pago == 'efectivo')
     transferencia = sum(m.monto_cobrado for m in movimientos if m.metodo_pago == 'transferencia')
-    fiado = sum(m.monto_total for m in movimientos if m.metodo_pago == 'cta_corriente')
+
+    deuda_en_calle = db.query(func.sum(Cliente.saldo_dinero))\
+                       .filter(Cliente.tenant_id == tenant_id, Cliente.saldo_dinero > 0)\
+                       .scalar() or 0.0
     
-    return {"efectivo": efectivo, "transferencia": transferencia, "fiado": fiado}
+    return {
+        "efectivo": efectivo, 
+        "transferencia": transferencia, 
+        "fiado": deuda_en_calle
+    }
