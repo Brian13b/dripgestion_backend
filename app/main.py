@@ -29,7 +29,7 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/")
 def read_root():
     return {
-        "sistema": "Arlestin API",
+        "sistema": "Drip Gestión API v1.4.1",
         "estado": "Operativo",
         "multitenant": True
     }
