@@ -1,6 +1,13 @@
-from sqlalchemy import JSON, Column, Integer, String, Float, ForeignKey
+from sqlalchemy import JSON, Column, Integer, String, Float, ForeignKey, Enum, Boolean
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+import enum
+
+class CondicionIVA(str, enum.Enum):
+    CONSUMIDOR_FINAL = "Consumidor Final"
+    MONOTRIBUTISTA = "Monotributista"
+    RESPONSABLE_INSCRIPTO = "Responsable Inscripto"
+    EXENTO = "Exento"
 
 class Cliente(Base):
     __tablename__ = "clientes"
@@ -17,6 +24,10 @@ class Cliente(Base):
     observaciones = Column(String, nullable=True)
 
     pin_acceso = Column(String, default="0000")
+
+    # Datos fiscales
+    cuit = Column(String(11), nullable=True)
+    condicion_iva = Column(Enum(CondicionIVA), default=CondicionIVA.CONSUMIDOR_FINAL, nullable=True)
     
     # Saldos 
     saldo_dinero = Column(Float, default=0.0)
