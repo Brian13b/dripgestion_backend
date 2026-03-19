@@ -27,7 +27,7 @@ class Cliente(Base):
 
     # Datos fiscales
     cuit = Column(String(11), nullable=True)
-    condicion_iva = Column(Enum(CondicionIVA), default=CondicionIVA.CONSUMIDOR_FINAL, nullable=True)
+    condicion_iva = Column(Enum(CondicionIVA, native_enum=False), default=CondicionIVA.CONSUMIDOR_FINAL, nullable=True)
     
     # Saldos 
     saldo_dinero = Column(Float, default=0.0)
