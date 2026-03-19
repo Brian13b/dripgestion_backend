@@ -1,9 +1,10 @@
+from typing import Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date
 from app.models import cliente, logistica, user as user_model
 
-def obtener_metricas_dashboard(db: Session, user: user_model.User):
+def obtener_metricas_dashboard(db: Session, user: Any):
     tenant_id = user.tenant_id
     hoy = date.today()
     
