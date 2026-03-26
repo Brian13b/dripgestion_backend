@@ -6,7 +6,7 @@ def get_user_by_username(db: Session, username: str, tenant_id: int):
     return db.query(User).filter(User.username == username, User.tenant_id == tenant_id).first()
 
 def get_users_by_tenant(db: Session, tenant_id: int):
-    return db.query(User).filter(User.tenant_id == tenant_id).all()
+    return db.query(User).filter(User.tenant_id == tenant_id, User.role != UserRole.CLIENTE).all()
 
 def create_user_within_tenant(db: Session, user_in, tenant_id: int):
     db_user = User(
