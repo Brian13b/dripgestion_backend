@@ -5,7 +5,7 @@ from datetime import date
 from app import schemas, models
 from app.api import deps
 from app.db.session import get_db
-from app.schemas.logistica import PagoManualCreate
+from app.schemas.logistica import PagoManualCreate, RecorridoAsignarRepartidor
 from app.services import logistica_service
 from app.crud import crud_logistica
 

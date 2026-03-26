@@ -15,6 +15,9 @@ class RecorridoUpdate(BaseModel):
     nombre: Optional[str] = None
     clientes_orden: Optional[List[int]] = None 
 
+class RecorridoAsignarRepartidor(BaseModel):
+    repartidor_id: int
+
 class RecorridoResponse(RecorridoBase):
     id: int
     tenant_id: int
