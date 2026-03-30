@@ -64,11 +64,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Push al repositorio de la agencia
         env:
           DEST_TOKEN: ${{ secrets.GB_SYNC_TOKEN }} 
           DEST_REPO: "github.com/GB-Soluciones-Digitales/dripgestion_backend.git" 
         run: |
-          git remote add gb-soluciones https://oauth2:${DEST_TOKEN}@${DEST_REPO}
+          git remote add gb-soluciones https://${DEST_TOKEN}@${DEST_REPO}
           git push gb-soluciones main --force
