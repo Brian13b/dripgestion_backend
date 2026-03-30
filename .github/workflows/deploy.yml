@@ -5,14 +5,31 @@ on:
     branches: [ "main" ]
 
 jobs:
+  # TRABAJO 1: Testear y subir a Railway
   test-and-deploy:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - name: Checkout del código
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Configurar Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.13'
 
@@ -22,6 +39,12 @@ jobs:
         pip install -r requirements.txt
 
     - name: Correr Tests de Seguridad
+      env:
+        PROJECT_NAME: "DripGestion Test"
+        SQLALCHEMY_DATABASE_URL: "postgresql://test_user:test_password@localhost:5432/test_db"
+        SECRET_KEY: "super-secret-key-para-tests"
+        ALGORITHM: "HS256"
+        ACCESS_TOKEN_EXPIRE_MINUTES: "30"
       run: python -m pytest
 
     - name: Deploy a Railway
@@ -31,3 +54,21 @@ jobs:
         railway up --detach
       env:
         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # TRABAJO 2: Sincronizar con GB Soluciones
+  sync-to-agency:
+    runs-on: ubuntu-latest
+    needs: [test-and-deploy]
+    steps:
+      - name: Checkout del código fuente
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push al repositorio de la agencia
+        env:
+          DEST_TOKEN: ${{ secrets.GB_SYNC_TOKEN }} 
+          DEST_REPO: "github.com/GBSolucionesDigitales/dripgestion_backend.git" 
+        run: |
+          git remote add gb-soluciones https://oauth2:${DEST_TOKEN}@${DEST_REPO}
+          git push gb-soluciones main --force
