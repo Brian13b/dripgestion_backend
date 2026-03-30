@@ -51,7 +51,7 @@ jobs:
       if: success()
       run: |
         npm install -g @railway/cli
-        railway up --detach
+        railway up --service dripgestion_backend --detach
       env:
         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
