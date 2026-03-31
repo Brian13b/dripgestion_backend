@@ -26,6 +26,27 @@ def crear_usuario_equipo(user_in: schemas.user.UserCreate, db: Session = Depends
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
+@router.post("/{user_id}/logout-all", status_code=status.HTTP_200_OK)
+def logout_employee_devices(user_id: int, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+
+    user = user_service.obtener_por_id(db, user_id, current_admin.tenant_id)
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado en este equipo")
+
+    if user.id == current_admin.id:
+         raise HTTPException(
+             status_code=400, 
+             detail="No podés usar esta función para cerrar tu propia sesión"
+         )
+         
+    user.token_version += 1
+    
+    db.add(user)
+    db.commit()
+    
+    return {"message": f"Se han cerrado todas las sesiones del usuario '{user.username}'."}
+    
 @router.put("/{user_id}", response_model=schemas.user.UserResponse)
 def editar_usuario_equipo(
     user_id: int, 
