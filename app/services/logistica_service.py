@@ -68,6 +68,10 @@ def registrar_entrega(db: Session, mov_in: MovimientoCreate, current_user: Any, 
  
     try:
         movimiento_creado = crud_logistica.create_movimiento(db, mov_data)
+
+        db.commit() 
+        db.refresh(movimiento_creado)
+
         return movimiento_creado
     
     except Exception as e:
@@ -83,6 +87,7 @@ def registrar_pago_manual(db: Session, cliente_id: int, pago_in: PagoManualCreat
         raise ValueError("Cliente no encontrado")
  
     cliente.saldo_dinero -= pago_in.monto
+    db.add(cliente)
 
     mov_data = {
         "tenant_id": tenant_id,
@@ -95,8 +100,15 @@ def registrar_pago_manual(db: Session, cliente_id: int, pago_in: PagoManualCreat
         "metodo_pago": pago_in.metodo_pago,
         "observacion": f"Pago de saldo. {pago_in.observacion}".strip()
     }
-    crud_logistica.create_movimiento(db, mov_data)
-    return {"message": "Pago registrado", "nuevo_saldo": cliente.saldo_dinero}
+    
+    try:
+        crud_logistica.create_movimiento(db, mov_data)
+        db.commit() 
+        
+        return {"message": "Pago registrado", "nuevo_saldo": cliente.saldo_dinero}
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f"Error al registrar el pago manual: {str(e)}")
 
 def obtener_historial_dia(db: Session, fecha: date, tenant_id: int):
     movimientos = crud_logistica.get_movimientos_dia(db, fecha, tenant_id)

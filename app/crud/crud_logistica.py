@@ -55,8 +55,7 @@ def delete_recorrido(db: Session, recorrido: logistica.Recorrido):
 def create_movimiento(db: Session, mov_data: dict):
     nuevo_mov = logistica.Movimiento(**mov_data)
     db.add(nuevo_mov)
-    db.commit()
-    db.refresh(nuevo_mov)
+    db.flush()
     return nuevo_mov
 
 def get_movimientos_dia(db: Session, fecha: date, tenant_id: int):

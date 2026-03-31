@@ -2,6 +2,9 @@ import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -14,7 +17,7 @@ def subir_logo(file: UploadFile, tenant_id: int, old_public_id: str = None):
         try:
             cloudinary.uploader.destroy(old_public_id)
         except Exception as e:
-            print(f"Error borrando logo viejo: {e}")
+            logger.error(f"Error borrando logo viejo en Cloudinary: {str(e)}", exc_info=True)
 
     folder_path = f"drip_gestion/tenants/tenant_{tenant_id}"
     
