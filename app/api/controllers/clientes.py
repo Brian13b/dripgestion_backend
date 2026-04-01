@@ -1,4 +1,3 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app import models, schemas
@@ -8,9 +7,9 @@ from app.services import cliente_service
 
 router = APIRouter()
 
-@router.get("", response_model=List[schemas.ClienteResponse])
+@router.get("")
 def read_clientes(db: Session = Depends(get_db), skip: int = 0, limit: int = 100, current_user: models.user.User = Depends(deps.get_current_user)):
-    return db.query(models.cliente.Cliente).filter(models.cliente.Cliente.tenant_id == current_user.tenant_id).offset(skip).limit(limit).all()
+    return cliente_service.obtener_clientes_paginados(db, current_user.tenant_id, skip, limit)
 
 @router.post("", response_model=schemas.ClienteResponse)
 def create_cliente(cliente_in: schemas.ClienteCreate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
@@ -21,29 +20,22 @@ def create_cliente(cliente_in: schemas.ClienteCreate, db: Session = Depends(get_
 
 @router.get("/{cliente_id}", response_model=schemas.ClienteResponse)
 def read_cliente_by_id(cliente_id: int, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
-    cliente = db.query(models.cliente.Cliente).filter(models.cliente.Cliente.id == cliente_id, models.cliente.Cliente.tenant_id == current_user.tenant_id).first()
-    if not cliente: raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    return cliente
+    try:
+        return cliente_service.obtener_cliente_por_id(db, cliente_id, current_user.tenant_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.put("/{cliente_id}", response_model=schemas.ClienteResponse)
 def update_cliente(cliente_id: int, cliente_in: schemas.ClienteUpdate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
-    cliente = db.query(models.cliente.Cliente).filter(models.cliente.Cliente.id == cliente_id, models.cliente.Cliente.tenant_id == current_user.tenant_id).first()
-    if not cliente: raise HTTPException(status_code=404, detail="Cliente no encontrado")
-
-    update_data = cliente_in.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(cliente, field, value)
-    db.commit()
-    db.refresh(cliente)
-    return cliente
+    try:
+        return cliente_service.actualizar_cliente(db, cliente_id, cliente_in.dict(exclude_unset=True), current_user.tenant_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.delete("/{cliente_id}")
 def delete_cliente(cliente_id: int, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
-    cliente = db.query(models.cliente.Cliente).filter(models.cliente.Cliente.id == cliente_id, models.cliente.Cliente.tenant_id == current_user.tenant_id).first()
-    if not cliente: raise HTTPException(status_code=404, detail="Cliente no encontrado")
-
-    usuario = db.query(models.user.User).filter(models.user.User.id == cliente.user_id).first()
-    db.delete(cliente)
-    if usuario: db.delete(usuario)
-    db.commit()
-    return {"message": "Cliente eliminado exitosamente"}
+    try:
+        cliente_service.eliminar_cliente(db, cliente_id, current_user.tenant_id)
+        return {"message": "Cliente eliminado exitosamente"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

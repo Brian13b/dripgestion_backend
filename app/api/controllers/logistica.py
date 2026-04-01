@@ -8,6 +8,8 @@ from app.db.session import get_db
 from app.schemas.logistica import PagoManualCreate, RecorridoAsignarRepartidor
 from app.services import logistica_service
 from app.crud import crud_logistica
+from fastapi import Request
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -88,7 +90,8 @@ def registrar_pago_manual(cliente_id: int, pago_in: PagoManualCreate, db: Sessio
 
 
 @router.get("/historial")
-def get_historial_por_fecha(fecha: Optional[date] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
+@limiter.limit("20/minute")
+def get_historial_por_fecha(request: Request, fecha: Optional[date] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
     if current_user.role == models.user.UserRole.CLIENTE:
         raise HTTPException(status_code=403, detail="Acceso no permitido")
  
@@ -127,7 +130,8 @@ def get_historial_por_fecha(fecha: Optional[date] = None, db: Session = Depends(
     return logistica_service.obtener_historial_dia(db, fecha, current_user.tenant_id)
  
 @router.get("/historial/mes-actual")
-def get_resumen_mes_actual(db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+@limiter.limit("15/minute")
+def get_resumen_mes_actual(request: Request, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
     try:
         return logistica_service.obtener_resumen_mes(db, current_admin)
     except ValueError as e:
