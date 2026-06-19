@@ -16,7 +16,9 @@ def _validar_cliente_en_rutas_de_repartidor(db: Session, cliente_id: int, repart
     ).all()
 
     for recorrido in recorridos:
-        if recorrido.clientes_orden and cliente_id in recorrido.clientes_orden:
+        # Casteo a int defensivo: el JSON puede devolver strings según el driver de BD
+        orden = [int(c) for c in recorrido.clientes_orden] if recorrido.clientes_orden else []
+        if cliente_id in orden:
             return
 
     raise ValueError("No tenés permiso para operar con este cliente. No está asignado en ninguna de tus rutas.")
@@ -50,48 +52,55 @@ def registrar_entrega(db: Session, mov_in: MovimientoCreate, current_user: Any, 
         repartidor_id = recorrido.repartidor_id or current_user.id
     elif current_user.role != UserRole.ADMIN:
         _validar_cliente_en_rutas_de_repartidor(db, mov_in.cliente_id, current_user.id, tenant_id)
- 
-    if not isinstance(cliente.stock_envases, dict):
-        cliente.stock_envases = {}
- 
-    stock_actualizado = dict(cliente.stock_envases)
-    for producto_id, cant in mov_in.detalles.items():
-        if str(producto_id) not in stock_actualizado:
-            stock_actualizado[str(producto_id)] = 0
-        entregado = cant.get('entregado', 0)
-        devuelto = cant.get('devuelto', 0)
-        stock_actualizado[str(producto_id)] += (entregado - devuelto)
- 
-    cliente.stock_envases = stock_actualizado
- 
-    deuda_generada = mov_in.monto_total - mov_in.monto_cobrado
-    cliente.saldo_dinero += deuda_generada
- 
-    db.add(cliente)
- 
-    mov_data = {
-        "tenant_id": tenant_id,
-        "cliente_id": mov_in.cliente_id,
-        "repartidor_id": repartidor_id,
-        "recorrido_id": mov_in.recorrido_id,
-        "detalles": mov_in.detalles,
-        "monto_total": mov_in.monto_total,
-        "monto_cobrado": mov_in.monto_cobrado,
-        "metodo_pago": mov_in.metodo_pago,
-        "observacion": mov_in.observacion
-    }
- 
+
     try:
+        # --- Actualización de stock de envases ---
+        if not isinstance(cliente.stock_envases, dict):
+            cliente.stock_envases = {}
+
+        stock_actualizado = dict(cliente.stock_envases)
+        for producto_id, cant in mov_in.detalles.items():
+            if str(producto_id) not in stock_actualizado:
+                stock_actualizado[str(producto_id)] = 0
+            # Bug fix: cant puede ser int (schema Dict[str, Any]) o dict {entregado, devuelto}
+            if isinstance(cant, dict):
+                entregado = int(cant.get('entregado', 0))
+                devuelto  = int(cant.get('devuelto', 0))
+            else:
+                entregado = int(cant)
+                devuelto  = 0
+            stock_actualizado[str(producto_id)] += (entregado - devuelto)
+
+        cliente.stock_envases = stock_actualizado
+
+        # --- Actualización de saldo ---
+        deuda_generada = mov_in.monto_total - mov_in.monto_cobrado
+        cliente.saldo_dinero += deuda_generada
+        db.add(cliente)
+
+        # --- Persistencia del movimiento ---
+        mov_data = {
+            "tenant_id":    tenant_id,
+            "cliente_id":   mov_in.cliente_id,
+            "repartidor_id": repartidor_id,
+            "recorrido_id": mov_in.recorrido_id,
+            "detalles":     mov_in.detalles,
+            "monto_total":  mov_in.monto_total,
+            "monto_cobrado": mov_in.monto_cobrado,
+            "metodo_pago":  mov_in.metodo_pago,
+            "observacion":  mov_in.observacion,
+        }
         movimiento_creado = crud_logistica.create_movimiento(db, mov_data)
-
-        db.commit() 
+        db.commit()
         db.refresh(movimiento_creado)
-
         return movimiento_creado
-    
+
+    except ValueError:
+        db.rollback()
+        raise
     except Exception as e:
-        db.rollback() 
-        raise ValueError(f"Error al registrar la entrega en la base de datos: {str(e)}")
+        db.rollback()
+        raise ValueError(f"Error al registrar la entrega: {str(e)}")
 
 def registrar_pago_manual(db: Session, cliente_id: int, pago_in: PagoManualCreate, current_user: Any, tenant_id: int):
     cliente = db.query(Cliente).filter(
