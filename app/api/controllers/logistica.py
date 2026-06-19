@@ -8,8 +8,6 @@ from app.db.session import get_db
 from app.schemas.logistica import PagoManualCreate, RecorridoAsignarRepartidor
 from app.services import logistica_service
 from app.crud import crud_logistica
-from fastapi import Request
-from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -30,7 +28,7 @@ def get_recorrido_by_id(recorrido_id: int, db: Session = Depends(get_db), curren
     if current_user.role == models.user.UserRole.REPARTIDOR:
         if recorrido.repartidor_id != current_user.id:
             raise HTTPException(status_code=403, detail="No tenés permiso para ver este recorrido")
- 
+
     return recorrido
 
 @router.put("/recorridos/{recorrido_id}", response_model=schemas.RecorridoResponse)
@@ -38,12 +36,12 @@ def update_recorrido(recorrido_id: int, recorrido_in: schemas.RecorridoUpdate, d
     recorrido = crud_logistica.get_recorrido(db, recorrido_id, current_admin.tenant_id)
     if not recorrido:
         raise HTTPException(status_code=404, detail="Recorrido no encontrado")
- 
+
     if recorrido_in.nombre:
         recorrido.nombre = recorrido_in.nombre
     if recorrido_in.clientes_orden is not None:
         recorrido.clientes_orden = recorrido_in.clientes_orden
- 
+
     db.commit()
     db.refresh(recorrido)
     return recorrido
@@ -53,7 +51,7 @@ def asignar_repartidor(recorrido_id: int, body: RecorridoAsignarRepartidor, db: 
     recorrido = crud_logistica.get_recorrido(db, recorrido_id, current_admin.tenant_id)
     if not recorrido:
         raise HTTPException(status_code=404, detail="Recorrido no encontrado")
- 
+
     try:
         return crud_logistica.update_recorrido_repartidor(
             db, recorrido, body.repartidor_id, current_admin.tenant_id
@@ -78,7 +76,6 @@ def registrar_movimiento(mov_in: schemas.MovimientoCreate, db: Session = Depends
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @router.post("/movimientos/pago/{cliente_id}")
 def registrar_pago_manual(cliente_id: int, pago_in: PagoManualCreate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
     if current_user.role == models.user.UserRole.CLIENTE:
@@ -88,24 +85,21 @@ def registrar_pago_manual(cliente_id: int, pago_in: PagoManualCreate, db: Sessio
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-
 @router.get("/historial")
-@limiter.limit("20/minute")
-def get_historial_por_fecha(request: Request, fecha: Optional[date] = None, chofer_id: Optional[int] = None, recorrido_id: Optional[int] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
+def get_historial_por_fecha(fecha: Optional[date] = None, chofer_id: Optional[int] = None, recorrido_id: Optional[int] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
     if current_user.role == models.user.UserRole.CLIENTE:
         raise HTTPException(status_code=403, detail="Acceso no permitido")
 
     if not fecha:
         fecha = date.today()
- 
+
     if current_user.role == models.user.UserRole.REPARTIDOR:
         chofer_id = current_user.id
 
     return logistica_service.obtener_historial_dia(db, fecha, current_user.tenant_id, chofer_id, recorrido_id)
- 
+
 @router.get("/historial/mes-actual")
-@limiter.limit("15/minute")
-def get_resumen_mes_actual(request: Request, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+def get_resumen_mes_actual(db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
     try:
         return logistica_service.obtener_resumen_mes(db, current_admin)
     except ValueError as e:
