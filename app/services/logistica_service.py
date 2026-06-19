@@ -9,6 +9,19 @@ from app.models.cliente import Cliente
 from app.models.producto import Producto
 from app.models.logistica import Recorrido
 
+def _validar_cliente_en_rutas_de_repartidor(db: Session, cliente_id: int, repartidor_id: int, tenant_id: int):
+    recorridos = db.query(Recorrido).filter(
+        Recorrido.tenant_id == tenant_id,
+        Recorrido.repartidor_id == repartidor_id
+    ).all()
+
+    for recorrido in recorridos:
+        if recorrido.clientes_orden and cliente_id in recorrido.clientes_orden:
+            return
+
+    raise ValueError("No tenés permiso para operar con este cliente. No está asignado en ninguna de tus rutas.")
+
+
 def registrar_entrega(db: Session, mov_in: MovimientoCreate, current_user: Any, tenant_id: int):
 
     cliente = db.query(Cliente).filter(
@@ -26,15 +39,17 @@ def registrar_entrega(db: Session, mov_in: MovimientoCreate, current_user: Any, 
             Recorrido.id == mov_in.recorrido_id,
             Recorrido.tenant_id == tenant_id
         ).first()
- 
+
         if not recorrido:
             raise ValueError("Recorrido no encontrado")
- 
+
         if current_user.role != UserRole.ADMIN:
             if recorrido.repartidor_id != current_user.id:
                 raise ValueError("No tenés permiso para registrar movimientos en este recorrido")
- 
+
         repartidor_id = recorrido.repartidor_id or current_user.id
+    elif current_user.role != UserRole.ADMIN:
+        _validar_cliente_en_rutas_de_repartidor(db, mov_in.cliente_id, current_user.id, tenant_id)
  
     if not isinstance(cliente.stock_envases, dict):
         cliente.stock_envases = {}
@@ -85,6 +100,9 @@ def registrar_pago_manual(db: Session, cliente_id: int, pago_in: PagoManualCreat
     ).first()
     if not cliente:
         raise ValueError("Cliente no encontrado")
+
+    if current_user.role != UserRole.ADMIN:
+        _validar_cliente_en_rutas_de_repartidor(db, cliente_id, current_user.id, tenant_id)
  
     cliente.saldo_dinero -= pago_in.monto
     db.add(cliente)
