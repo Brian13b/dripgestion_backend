@@ -10,16 +10,12 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title=settings.PROJECT_NAME)
 
 origenes_permitidos = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://arlestin.vercel.app",
-    "https://aguavida.vercel.app"
+    o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origenes_permitidos,
-    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

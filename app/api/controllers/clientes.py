@@ -7,7 +7,7 @@ from app.services import cliente_service
 
 router = APIRouter()
 
-@router.get("")
+@router.get("", response_model=schemas.ClienteListResponse)
 def read_clientes(db: Session = Depends(get_db), skip: int = 0, limit: int = 100, current_user: models.user.User = Depends(deps.get_current_user)):
     return cliente_service.obtener_clientes_paginados(db, current_user.tenant_id, skip, limit)
 
