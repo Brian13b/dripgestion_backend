@@ -1,13 +1,18 @@
 from fastapi import FastAPI
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.db.base import Base
 from app.db.session import engine
 from app.api.api import api_router
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 origenes_permitidos = [
     o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()

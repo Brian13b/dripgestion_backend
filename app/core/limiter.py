@@ -1,8 +1,8 @@
-# Dummy limiter para evitar errores de conexión a Redis
-class DummyLimiter:
-    def limit(self, *args, **kwargs):
-        def wrapper(func):
-            return func
-        return wrapper
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from app.core.config import settings
 
-limiter = DummyLimiter()
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=settings.REDIS_URL if settings.REDIS_URL else "memory://",
+)
