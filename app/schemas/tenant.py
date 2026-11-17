@@ -35,6 +35,7 @@ class TenantCreate(TenantBase):
 
 class TenantUpdate(BaseModel):
     nombre: Optional[str] = None
+    subdominio: Optional[str] = None
     whatsapp: Optional[str] = None
     logo_url: Optional[str] = None
     logo_public_id: Optional[str] = None

@@ -32,6 +32,31 @@ def update_tenant_config(config_in: TenantUpdate, db: Session = Depends(get_db),
         return tenant_service.actualizar_config_tenant(db, current_admin.tenant_id, update_data)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+@router.put("/{tenant_id}", response_model=TenantResponse)
+def update_tenant(tenant_id: int, tenant_in: TenantUpdate, db: Session = Depends(get_db), superadmin: User = Depends(deps.get_current_superadmin),):
+  update_data = tenant_in.model_dump(exclude_unset=True)
+
+  if "subdominio" in update_data:
+    nuevo_sub = update_data["subdominio"].lower().strip()
+    existe = (
+        db.query(Tenant)
+        .filter(
+            Tenant.subdominio == nuevo_sub,
+            Tenant.id != tenant_id,
+        )
+        .first()
+    )
+    if existe:
+      raise HTTPException(
+          status_code=400, detail="Ese subdominio ya está en uso por otra empresa"
+      )
+    update_data["subdominio"] = nuevo_sub
+
+  try:
+    return tenant_service.actualizar_config_tenant(db, tenant_id, update_data)
+  except ValueError as e:
+    raise HTTPException(status_code=404, detail=str(e))
     
 @router.post("/config/logo")
 async def upload_tenant_logo(file: UploadFile = File(...), db: Session = Depends(get_db), current_admin: User = Depends(deps.get_current_admin)):
