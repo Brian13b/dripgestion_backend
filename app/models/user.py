@@ -4,6 +4,7 @@ import enum
 from sqlalchemy.orm import validates
 
 class UserRole(str, enum.Enum):
+    SUPERADMIN = "superadmin"
     ADMIN = "admin"
     REPARTIDOR = "repartidor"
     CLIENTE = "cliente"
@@ -20,7 +21,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, index=True, nullable=False)
+    tenant_id = Column(Integer, index=True, nullable=True)
     
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)

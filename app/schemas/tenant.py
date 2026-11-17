@@ -47,6 +47,17 @@ class TenantUpdate(BaseModel):
     color_danger: Optional[str] = None
     color_secondary: Optional[str] = None
 
+class TenantOnboardingCreate(BaseModel):
+  # Datos de la empresa
+  nombre: str
+  subdominio: str
+  whatsapp: Optional[str] = None
+  color_primario: Optional[str] = "#25A7DA"
+
+  admin_username: str
+  admin_password: str
+  admin_full_name: str
+
 class TenantResponse(TenantBase):
     id: int
     is_active: bool
