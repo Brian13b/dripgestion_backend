@@ -45,15 +45,46 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(reusabl
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Sesión invalidada. Por favor, vuelva a iniciar sesión."
         )
-        
+
+    if user.role != models.user.UserRole.SUPERADMIN:
+        if not user.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuario sin empresa asignada",
+            )
+        tenant = (
+            db.query(models.tenant.Tenant)
+            .filter(models.tenant.Tenant.id == user.tenant_id)
+            .first()
+        )
+        if not tenant or not tenant.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "El acceso de esta empresa se encuentra suspendido. Contacte a"
+                    " soporte."
+                ),
+        )
+    
     return user
 
 def get_current_admin(
     current_user: models.user.User = Depends(get_current_user)
 ) -> models.user.User:
-    if current_user.role != models.user.UserRole.ADMIN:
+    if current_user.role not in [
+        models.user.UserRole.ADMIN,
+        models.user.UserRole.SUPERADMIN,
+    ]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="El usuario no tiene privilegios de administrador",
         )
     return current_user
+
+def get_current_superadmin(current_user: models.user.User = Depends(get_current_user)) -> models.user.User:
+  if current_user.role != models.user.UserRole.SUPERADMIN:
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Acceso restringido al administrador del sistema",
+    )
+  return current_user

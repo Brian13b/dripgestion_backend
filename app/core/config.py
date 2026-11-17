@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
+    FIRST_SUPERADMIN_USER: str = "gb_soluciones_digitales"
+    FIRST_SUPERADMIN_PASSWORD: str = "Superadmin123!"
+
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
     CLOUDINARY_API_KEY: Optional[str] = None
     CLOUDINARY_API_SECRET: Optional[str] = None

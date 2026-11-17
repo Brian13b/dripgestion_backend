@@ -1,21 +1,36 @@
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from SaaS_Backend.app.models.tenant import Tenant
 from app.core import security
 from app.core.config import settings
 from app.crud import crud_user
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import PasswordUpdate
 
-def autenticar_usuario(db: Session, username: str, password: str, tenant_id: int):
-    user = crud_user.get_user_by_username(db, username=username, tenant_id=tenant_id)
-    
-    if not user or not security.verify_password(password, user.hashed_password):
-        raise ValueError("Credenciales incorrectas para esta empresa")
-        
-    if not user.is_active:
-        raise ValueError("Usuario inactivo")
-        
+def autenticar_usuario(db: Session, username: str, password: str, tenant_id: Optional[int] = None) -> User:
+  user = db.query(User).filter(User.username == username.strip()).first()
+
+  if not user or not security.verify_password(password, user.hashed_password):
+    raise ValueError("Credenciales incorrectas")
+
+  if not user.is_active:
+    raise ValueError("Usuario inactivo")
+
+  if user.role == UserRole.SUPERADMIN:
     return user
+
+  if not tenant_id or user.tenant_id != tenant_id:
+    raise ValueError("Credenciales incorrectas para esta empresa")
+
+  tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+  if not tenant or not tenant.is_active:
+    raise ValueError(
+        "El acceso de esta empresa se encuentra suspendido. Contacte a soporte."
+    )
+
+  return user
 
 def generar_token_acceso(user: User):
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)

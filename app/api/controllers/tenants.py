@@ -1,10 +1,13 @@
+from ast import List
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
+from SaaS_Backend.app.core.security import get_password_hash
 from app.db.session import get_db
 from app.api import deps
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.tenant import Tenant
-from app.schemas.tenant import TenantResponse, TenantUpdate
+from app.schemas.tenant import TenantOnboardingCreate, TenantResponse, TenantUpdate
 from app.services import tenant_service
 from app.services import cloudinary_service
 
@@ -74,3 +77,62 @@ async def upload_tenant_logo(file: UploadFile = File(...), db: Session = Depends
         "message": "Logo actualizado correctamente", 
         "logo_url": tenant.logo_url
     }
+
+@router.get("/", response_model=List[TenantResponse])
+def listar_todas_las_empresas(db: Session = Depends(get_db), superadmin: User = Depends(deps.get_current_superadmin)):
+  return db.query(Tenant).order_by(Tenant.id.desc()).all()
+
+
+@router.post("/onboarding", response_model=TenantResponse)
+def crear_empresa_con_admin(data: TenantOnboardingCreate, db: Session = Depends(get_db), superadmin: User = Depends(deps.get_current_superadmin)):
+  if db.query(Tenant).filter(Tenant.subdominio == data.subdominio).first():
+    raise HTTPException(
+        status_code=400, detail="Ese subdominio ya está registrado"
+    )
+
+  if db.query(User).filter(User.username == data.admin_username).first():
+    raise HTTPException(
+        status_code=400, detail="Ese nombre de usuario ya está en uso"
+    )
+
+  nuevo_tenant = Tenant(
+      nombre=data.nombre,
+      subdominio=data.subdominio.lower().strip(),
+      whatsapp=data.whatsapp,
+      color_primario=data.color_primario or "#25A7DA",
+      is_active=True,
+  )
+  db.add(nuevo_tenant)
+  db.flush()
+    
+  nuevo_admin = User(
+      tenant_id=nuevo_tenant.id,
+      username=data.admin_username.strip(),
+      hashed_password=get_password_hash(data.admin_password),
+      full_name=data.admin_full_name,
+      role=UserRole.ADMIN,
+      is_active=True,
+  )
+  db.add(nuevo_admin)
+
+  db.commit()
+  db.refresh(nuevo_tenant)
+  return nuevo_tenant
+
+
+@router.patch("/{tenant_id}/estado", response_model=TenantResponse)
+def cambiar_estado_empresa(tenant_id: int, activo: bool, db: Session = Depends(get_db), superadmin: User = Depends(deps.get_current_superadmin)):
+  tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+  if not tenant:
+    raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+  tenant.is_active = activo
+
+  if not activo:
+    usuarios_empresa = db.query(User).filter(User.tenant_id == tenant_id).all()
+    for u in usuarios_empresa:
+      u.token_version += 1
+
+  db.commit()
+  db.refresh(tenant)
+  return tenant
