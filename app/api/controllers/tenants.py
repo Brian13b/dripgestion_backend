@@ -2,7 +2,7 @@ from ast import List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-from SaaS_Backend.app.core.security import get_password_hash
+from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.api import deps
 from app.models.user import User, UserRole

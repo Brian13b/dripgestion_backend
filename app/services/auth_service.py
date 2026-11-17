@@ -2,7 +2,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 from datetime import timedelta
-from SaaS_Backend.app.models.tenant import Tenant
+from app.models.tenant import Tenant
 from app.core import security
 from app.core.config import settings
 from app.crud import crud_user

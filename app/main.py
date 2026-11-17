@@ -8,7 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
-from SaaS_Backend.app.db.init_db import init_superadmin
+from app.db.init_db import init_superadmin
 
 from app.api.api import api_router
 from app.core.config import settings
