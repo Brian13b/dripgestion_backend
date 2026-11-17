@@ -21,12 +21,16 @@ class UserUpdate(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class UserResponse(UserBase):
-    id: int
-    tenant_id: int
+class UserResponse(BaseModel):
+  id: int
+  username: str
+  full_name: Optional[str] = None
+  role: str
+  tenant_id: Optional[int] = None
+  is_active: bool
 
-    class Config:
-        from_attributes = True
+  class Config:
+    from_attributes = True
 
 class PasswordUpdate(BaseModel):
     current_password: str
