@@ -38,6 +38,9 @@ origenes_permitidos = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origenes_permitidos,
+    allow_origin_regex=(
+        r"^https://([a-zA-Z0-9-]+\.)?(vercel\.app|dripgestion\.com)$"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
