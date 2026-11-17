@@ -1,5 +1,3 @@
-from ast import List
-
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from app.core.security import get_password_hash
@@ -78,7 +76,7 @@ async def upload_tenant_logo(file: UploadFile = File(...), db: Session = Depends
         "logo_url": tenant.logo_url
     }
 
-@router.get("/", response_model=List[TenantResponse])
+@router.get("/", response_model=list[TenantResponse])
 def listar_todas_las_empresas(db: Session = Depends(get_db), superadmin: User = Depends(deps.get_current_superadmin)):
   return db.query(Tenant).order_by(Tenant.id.desc()).all()
 
