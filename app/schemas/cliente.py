@@ -1,6 +1,15 @@
+import enum
 from typing import Any, Dict, List, Optional
 from app.models.cliente import CondicionIVA
 from pydantic import BaseModel, Field, computed_field
+
+class EnvaseSaldoItem(BaseModel):
+  tipo_envase_id: int
+  nombre: str
+  codigo: str
+  cantidad: int
+  valor_reposicion: float = 0.0
+  subtotal_reposicion: float = 0.0
 
 class ClienteBase(BaseModel):
   nombre_negocio: str
@@ -32,6 +41,7 @@ class ClienteResponse(ClienteBase):
   tenant_id: int
   saldo_dinero: float
   stock_envases: Dict[str, Any] = {}
+  envases_detalle: List[EnvaseSaldoItem] = []
   orden_visita_default: int
   pin_acceso: Optional[str] = Field(default=None, exclude=True)
 

@@ -28,9 +28,10 @@ def read_cliente_by_id(cliente_id: int, db: Session = Depends(get_db), current_u
 @router.put("/{cliente_id}", response_model=schemas.ClienteResponse)
 def update_cliente(cliente_id: int, cliente_in: schemas.ClienteUpdate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
     try:
-        return cliente_service.actualizar_cliente(db, cliente_id, cliente_in.dict(exclude_unset=True), current_user.tenant_id)
+        return cliente_service.actualizar_cliente(db, cliente_id, cliente_in.model_dump(exclude_unset=True), current_user.tenant_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        status_code = 404 if "no encontrado" in str(e).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(e))
 
 @router.delete("/{cliente_id}")
 def delete_cliente(cliente_id: int, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
