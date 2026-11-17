@@ -1,18 +1,22 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+from app.api.api import api_router
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.db.base import Base
 from app.db.session import engine
-from app.api.api import api_router
-from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME)
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 origenes_permitidos = [
     o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()
@@ -31,7 +35,7 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/")
 def read_root():
     return {
-        "sistema": "Drip Gestión API v1.4.1",
+        "sistema": "Drip Gestión API v1.5.1",
         "estado": "Operativo",
         "multitenant": True
     }
