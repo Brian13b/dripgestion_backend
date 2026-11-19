@@ -12,6 +12,15 @@ Los tests usan una base **SQLite temporal** (se fija en `conftest.py` antes de i
 la base del `.env`. Cada test arranca con tablas vacías, sin rate limit y con claves foráneas activadas
 (como Postgres). Los errores no controlados se ven como HTTP 500, igual que en producción.
 
+## Correr contra PostgreSQL real (opcional)
+Algunas garantías (bloqueo de fila en operaciones simultáneas) solo se pueden probar con PostgreSQL.
+Con una base **descartable** cuyo nombre termine en `_test` (cada test borra y recrea las tablas):
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql://usuario:clave@localhost:5432/dripgestion_test"
+.\venv\Scripts\python.exe -m pytest app/tests -q
+```
+
 ## Convención de bugs
 Un test marcado con `@bug("BUG-xx", ...)` es `xfail(strict=True)`: describe el comportamiento **correcto** y hoy
 falla por un bug documentado en `AUDITORIA_BACKEND.md`. Cuando el bug se corrige, el test pasa y pytest lo marca como
@@ -31,9 +40,11 @@ fallo ("XPASS strict") para que se quite el decorador.
 | `test_dashboard_portal.py` | KPIs, envases por tipo, métodos de pago, rendimiento por recorrido, comparativo de meses; portal del cliente (saldo, envases, últimos movimientos). |
 | `test_tenants.py` | Info pública, alta de empresa + admin, suspensión/reactivación (cierra sesiones), branding, subida de logo (formato, tamaño, permisos, falla de Cloudinary mockeada). |
 | `test_salud_y_seguridad.py` | `/`, `/health`, OpenAPI, CORS, superadmin inicial. |
+| `test_zona_horaria.py` | Día de caja en hora local (corte a las 00:00 de Argentina), fin de mes y de año nocturnos, "hoy" del negocio, hora y fecha mostradas en historial y portal. |
+| `test_idempotencia_concurrencia.py` | Reintentos con `Idempotency-Key` (entregas y pagos), conflicto entre clientes, aislamiento por empresa, peticiones simultáneas con la misma clave, bloqueo de fila (`FOR UPDATE`) y prueba de carga contable (solo PostgreSQL). |
 | `test_api.py` | Tests previos del proyecto (humo, rutas protegidas, flujo de entrega). Se volvió hermético: antes dependía de que el producto ID 1 existiera en la base de desarrollo. |
 
 ## Limitaciones
-- SQLite no reproduce el huso horario de `timestamptz` ni los bloqueos de fila de Postgres: esos riesgos están en
-  `AUDITORIA_BACKEND.md` y quedan sin test automático.
-- No hay tests de concurrencia ni de idempotencia (la API no las implementa todavía).
+- SQLite no tiene bloqueo de fila: la prueba de carga paralela se saltea ahí (`skipped`) y solo corre con
+  `TEST_DATABASE_URL`. El bloqueo se verifica igualmente compilando la consulta para PostgreSQL.
+- La suite todavía no se corrió contra un PostgreSQL real (no había uno disponible).

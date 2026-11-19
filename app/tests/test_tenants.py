@@ -42,9 +42,43 @@ def test_alta_con_subdominio_repetido_400(mundo):
     assert res.status_code == 400
 
 
-def test_alta_con_admin_repetido_400(mundo):
-    res = mundo.client.post(f"{API}/onboarding", json={**ALTA, "admin_username": "admin_a"}, headers=mundo.h_super)
-    assert res.status_code == 400
+def test_alta_permite_el_mismo_username_de_admin_en_otra_empresa(mundo):
+    """BUG-10 corregido: el username es único POR EMPRESA, no global."""
+    res = mundo.client.post(f"{API}/onboarding", json={**ALTA, "admin_username": "admin_a", "admin_password": "Otra-Clave-77"}, headers=mundo.h_super)
+    assert res.status_code == 200, res.text
+    nueva = res.json()["id"]
+    # Cada admin entra solo a SU empresa, con SU contraseña
+    h_nuevo = login(mundo.client, "admin_a", nueva, password="Otra-Clave-77")
+    assert mundo.client.get("/api/v1/auth/me", headers=h_nuevo).json()["tenant_id"] == nueva
+    h_viejo = login(mundo.client, "admin_a", mundo.ta.id)
+    assert mundo.client.get("/api/v1/auth/me", headers=h_viejo).json()["tenant_id"] == mundo.ta.id
+    assert mundo.client.post("/api/v1/auth/login/access-token", data={"username": "admin_a", "password": "Otra-Clave-77"}, headers={"X-Tenant-ID": str(mundo.ta.id)}).status_code == 401
+
+
+def test_username_repetido_dentro_de_la_misma_empresa_sigue_prohibido(db, mundo):
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+    from app.tests.conftest import crear_usuario
+
+    with pytest.raises(IntegrityError):
+        crear_usuario(db, mundo.ta.id, "admin_a")
+    db.rollback()
+
+
+def test_username_de_superadmin_no_se_puede_repetir(db, mundo):
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+    from app.models.user import UserRole
+    from app.tests.conftest import crear_usuario
+
+    with pytest.raises(IntegrityError):
+        crear_usuario(db, None, "super", UserRole.SUPERADMIN)
+    db.rollback()
+
+
+def test_un_usuario_de_empresa_no_puede_loguearse_con_el_nombre_de_otra(mundo):
+    res = mundo.client.post("/api/v1/auth/login/access-token", data={"username": "admin_b", "password": "Clave-Test-123"}, headers={"X-Tenant-ID": str(mundo.ta.id)})
+    assert res.status_code == 401
 
 
 def test_alta_con_datos_incompletos_422(mundo):

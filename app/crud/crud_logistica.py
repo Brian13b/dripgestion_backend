@@ -2,6 +2,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date
+from app.core.timezone import rango_dia, rango_mes
 from app.models import logistica, cliente
 from app.models.user import User, UserRole
 from app.models.logistica import Recorrido
@@ -59,11 +60,14 @@ def create_movimiento(db: Session, mov_data: dict):
     return nuevo_mov
 
 def get_movimientos_dia(db: Session, fecha: date, tenant_id: int, chofer_id: Optional[int] = None, recorrido_id: Optional[int] = None):
+    # "Día" = día LOCAL del negocio, no el día UTC del servidor (ver app/core/timezone.py)
+    inicio, fin = rango_dia(fecha)
     query = db.query(logistica.Movimiento, cliente.Cliente.nombre_negocio)\
         .join(cliente.Cliente)\
         .filter(
             logistica.Movimiento.tenant_id == tenant_id,
-            func.date(logistica.Movimiento.fecha) == fecha
+            logistica.Movimiento.fecha >= inicio,
+            logistica.Movimiento.fecha < fin,
         )
     
     if chofer_id:
@@ -76,10 +80,11 @@ def get_movimientos_dia(db: Session, fecha: date, tenant_id: int, chofer_id: Opt
     return query.order_by(logistica.Movimiento.fecha.desc()).all()
 
 def get_movimientos_mes(db: Session, mes: int, anio: int, tenant_id: int):
+    inicio, fin = rango_mes(anio, mes)
     return db.query(logistica.Movimiento).filter(
         logistica.Movimiento.tenant_id == tenant_id,
-        func.extract('month', logistica.Movimiento.fecha) == mes,
-        func.extract('year', logistica.Movimiento.fecha) == anio
+        logistica.Movimiento.fecha >= inicio,
+        logistica.Movimiento.fecha < fin,
     ).all()
 
 def get_movimientos_by_repartidor(db: Session, repartidor_id: int, tenant_id: int, fecha: Optional[date] = None):
@@ -90,5 +95,6 @@ def get_movimientos_by_repartidor(db: Session, repartidor_id: int, tenant_id: in
             logistica.Movimiento.repartidor_id == repartidor_id
         )
     if fecha:
-        query = query.filter(func.date(logistica.Movimiento.fecha) == fecha)
+        inicio, fin = rango_dia(fecha)
+        query = query.filter(logistica.Movimiento.fecha >= inicio, logistica.Movimiento.fecha < fin)
     return query.order_by(logistica.Movimiento.fecha.desc()).all()

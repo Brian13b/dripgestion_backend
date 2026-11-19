@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     REDIS_URL: Optional[str] = None
 
+    # Zona horaria del negocio: define qué es "hoy" y dónde cortan el día y el mes
+    # en historial, caja y dashboard (la base guarda los instantes en UTC).
+    APP_TIMEZONE: str = "America/Argentina/Buenos_Aires"
+
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,https://dripgestion.vercel.app"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

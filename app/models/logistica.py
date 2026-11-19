@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, Enum
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -24,6 +24,11 @@ class Recorrido(Base):
 
 class Movimiento(Base):
     __tablename__ = "movimientos"
+    __table_args__ = (
+        # Idempotencia: la misma clave en la misma empresa identifica UNA sola operación.
+        # (NULL = sin clave: no se restringe, así los clientes viejos siguen funcionando.)
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_movimientos_tenant_idempotency"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, index=True, nullable=False)
@@ -41,3 +46,5 @@ class Movimiento(Base):
     metodo_pago = Column(Enum(MetodoPago), default=MetodoPago.EFECTIVO)
     
     observacion = Column(String, nullable=True)
+
+    idempotency_key = Column(String(64), nullable=True)

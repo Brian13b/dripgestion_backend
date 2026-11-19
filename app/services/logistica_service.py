@@ -1,5 +1,7 @@
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
+from app.core.timezone import a_local, hoy_local
 from app.crud import crud_logistica
 from app.models.cliente import Cliente
 from app.models.logistica import Recorrido
@@ -7,7 +9,57 @@ from app.models.producto import Producto, TipoEnvase
 from app.models.user import UserRole
 from app.schemas.logistica import MovimientoCreate, PagoManualCreate
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from app.models.logistica import Movimiento
+
+
+class ClaveIdempotenciaReutilizada(ValueError):
+  """La misma Idempotency-Key se usó para otra operación distinta (otro cliente)."""
+
+
+def _query_cliente_bloqueado(db: Session, cliente_id: int, tenant_id: int):
+  """Cliente con BLOQUEO DE FILA (SELECT ... FOR UPDATE en PostgreSQL).
+
+  Dos operaciones simultáneas sobre el mismo cliente (dos repartidores, o un
+  repartidor y el admin) se ejecutan una detrás de otra en vez de pisarse:
+  `saldo_dinero` y `stock_envases` se leen, modifican y guardan sin perder
+  ninguna actualización. El bloqueo se libera con el commit/rollback.
+  """
+  return (
+      db.query(Cliente)
+      .filter(Cliente.id == cliente_id, Cliente.tenant_id == tenant_id)
+      .populate_existing()
+      .with_for_update()
+  )
+
+
+def _movimiento_por_clave(db: Session, tenant_id: int, clave: str):
+  return (
+      db.query(Movimiento)
+      .filter(Movimiento.tenant_id == tenant_id, Movimiento.idempotency_key == clave)
+      .first()
+  )
+
+
+def _repetido_o_none(db: Session, tenant_id: int, clave: Optional[str], cliente_id: int):
+  """Si la operación con esta clave ya se registró, devuelve el movimiento original."""
+  if not clave:
+    return None
+  existente = _movimiento_por_clave(db, tenant_id, clave)
+  if existente is None:
+    return None
+  if existente.cliente_id != cliente_id:
+    raise ClaveIdempotenciaReutilizada(
+        "La clave de idempotencia ya se usó para otra operación"
+    )
+  return existente
+
+
+def _centavos(valor) -> float:
+  """Redondea a 2 decimales (mitad hacia arriba) para que los saldos no acumulen
+  errores de punto flotante (0.1 + 0.2 != 0.3)."""
+  return float(Decimal(str(valor or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def _validar_cliente_en_rutas_de_repartidor(
@@ -38,16 +90,25 @@ def _validar_cliente_en_rutas_de_repartidor(
 
 
 def registrar_entrega(
-    db: Session, mov_in: MovimientoCreate, current_user: Any, tenant_id: int
+    db: Session,
+    mov_in: MovimientoCreate,
+    current_user: Any,
+    tenant_id: int,
+    idempotency_key: Optional[str] = None,
 ):
-  cliente = (
-      db.query(Cliente)
-      .filter(Cliente.id == mov_in.cliente_id, Cliente.tenant_id == tenant_id)
-      .first()
-  )
+  cliente = _query_cliente_bloqueado(db, mov_in.cliente_id, tenant_id).first()
 
   if not cliente:
     raise ValueError("Cliente no encontrado")
+
+  # Reintento (por mala señal, doble toque, etc.): se devuelve lo ya registrado
+  # SIN volver a sumar deuda, envases ni movimientos. Se chequea con el cliente
+  # bloqueado para que dos reintentos simultáneos se ordenen.
+  repetido = _repetido_o_none(db, tenant_id, idempotency_key, mov_in.cliente_id)
+  if repetido is not None:
+    db.rollback()  # libera el bloqueo
+    db.refresh(repetido)  # el rollback expira el objeto: se recarga para serializarlo
+    return repetido
 
   repartidor_id = current_user.id
 
@@ -148,8 +209,9 @@ def registrar_entrega(
     cliente.stock_envases = stock_actualizado
 
     # --- Actualización de saldo monetario ---
-    deuda_generada = mov_in.monto_total - mov_in.monto_cobrado
-    cliente.saldo_dinero += deuda_generada
+    monto_total = _centavos(mov_in.monto_total)
+    monto_cobrado = _centavos(mov_in.monto_cobrado)
+    cliente.saldo_dinero = _centavos((cliente.saldo_dinero or 0) + monto_total - monto_cobrado)
     db.add(cliente)
 
     # --- Persistencia del movimiento ---
@@ -163,10 +225,11 @@ def registrar_entrega(
         "repartidor_id": repartidor_id,
         "recorrido_id": mov_in.recorrido_id,
         "detalles": detalles_guardar,
-        "monto_total": mov_in.monto_total,
-        "monto_cobrado": mov_in.monto_cobrado,
+        "monto_total": monto_total,
+        "monto_cobrado": monto_cobrado,
         "metodo_pago": mov_in.metodo_pago,
         "observacion": mov_in.observacion,
+        "idempotency_key": idempotency_key,
     }
     movimiento_creado = crud_logistica.create_movimiento(db, mov_data)
     db.commit()
@@ -176,6 +239,17 @@ def registrar_entrega(
   except ValueError:
     db.rollback()
     raise
+  except IntegrityError:
+    # Carrera extrema: otra petición con la misma clave ganó justo antes.
+    db.rollback()
+    ganador = (
+        _movimiento_por_clave(db, tenant_id, idempotency_key)
+        if idempotency_key
+        else None
+    )
+    if ganador is not None:
+      return ganador
+    raise ValueError("Error al registrar la entrega: conflicto de datos")
   except Exception as e:
     db.rollback()
     raise ValueError(f"Error al registrar la entrega: {str(e)}")
@@ -187,21 +261,25 @@ def registrar_pago_manual(
     pago_in: PagoManualCreate,
     current_user: Any,
     tenant_id: int,
+    idempotency_key: Optional[str] = None,
 ):
-  cliente = (
-      db.query(Cliente)
-      .filter(Cliente.id == cliente_id, Cliente.tenant_id == tenant_id)
-      .first()
-  )
+  cliente = _query_cliente_bloqueado(db, cliente_id, tenant_id).first()
   if not cliente:
     raise ValueError("Cliente no encontrado")
+
+  repetido = _repetido_o_none(db, tenant_id, idempotency_key, cliente_id)
+  if repetido is not None:
+    nuevo_saldo = cliente.saldo_dinero
+    db.rollback()  # libera el bloqueo
+    return {"message": "Pago ya registrado", "nuevo_saldo": nuevo_saldo, "repetido": True}
 
   if current_user.role != UserRole.ADMIN:
     _validar_cliente_en_rutas_de_repartidor(
         db, cliente_id, current_user.id, tenant_id
     )
 
-  cliente.saldo_dinero -= pago_in.monto
+  monto_pago = _centavos(pago_in.monto)
+  cliente.saldo_dinero = _centavos((cliente.saldo_dinero or 0) - monto_pago)
   db.add(cliente)
 
   mov_data = {
@@ -211,15 +289,27 @@ def registrar_pago_manual(
       "recorrido_id": None,
       "detalles": {},
       "monto_total": 0.0,
-      "monto_cobrado": pago_in.monto,
+      "monto_cobrado": monto_pago,
       "metodo_pago": pago_in.metodo_pago,
       "observacion": f"Pago de saldo. {pago_in.observacion}".strip(),
+      "idempotency_key": idempotency_key,
   }
 
   try:
     crud_logistica.create_movimiento(db, mov_data)
     db.commit()
     return {"message": "Pago registrado", "nuevo_saldo": cliente.saldo_dinero}
+  except IntegrityError:
+    db.rollback()
+    ganador = (
+        _movimiento_por_clave(db, tenant_id, idempotency_key)
+        if idempotency_key
+        else None
+    )
+    if ganador is not None:
+      cli = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+      return {"message": "Pago ya registrado", "nuevo_saldo": cli.saldo_dinero, "repetido": True}
+    raise ValueError("Error al registrar el pago manual: conflicto de datos")
   except Exception as e:
     db.rollback()
     raise ValueError(f"Error al registrar el pago manual: {str(e)}")
@@ -268,7 +358,7 @@ def obtener_historial_dia(
 
     resultados.append({
         "id": mov.id,
-        "hora": mov.fecha.strftime("%H:%M"),
+        "hora": a_local(mov.fecha).strftime("%H:%M"),
         "cliente": nombre_cliente,
         "metodo_pago": mov.metodo_pago,
         "monto_total": mov.monto_total,
@@ -284,19 +374,19 @@ def obtener_resumen_mes(db: Session, user: Any):
   if user.role != UserRole.ADMIN:
     raise ValueError("No tienes permisos para ver el resumen mensual.")
 
-  hoy = date.today()
+  hoy = hoy_local()
   tenant_id = user.tenant_id
 
   movimientos = crud_logistica.get_movimientos_mes(
       db, hoy.month, hoy.year, tenant_id
   )
 
-  efectivo = sum(
+  efectivo = _centavos(sum(
       m.monto_cobrado for m in movimientos if m.metodo_pago == "efectivo"
-  )
-  transferencia = sum(
+  ))
+  transferencia = _centavos(sum(
       m.monto_cobrado for m in movimientos if m.metodo_pago == "transferencia"
-  )
+  ))
 
   deuda_en_calle = (
       db.query(func.sum(Cliente.saldo_dinero))
@@ -308,5 +398,5 @@ def obtener_resumen_mes(db: Session, user: Any):
   return {
       "efectivo": efectivo,
       "transferencia": transferencia,
-      "fiado": deuda_en_calle,
+      "fiado": _centavos(deuda_en_calle),
   }

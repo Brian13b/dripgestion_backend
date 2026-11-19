@@ -38,5 +38,7 @@ def delete_cliente(cliente_id: int, db: Session = Depends(get_db), current_user:
     try:
         cliente_service.eliminar_cliente(db, cliente_id, current_user.tenant_id)
         return {"message": "Cliente eliminado exitosamente"}
+    except cliente_service.ClienteConHistorialError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

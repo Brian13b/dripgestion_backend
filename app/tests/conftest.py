@@ -11,8 +11,17 @@ import tempfile
 _TMP_DIR = tempfile.mkdtemp(prefix="dripgestion_tests_")
 _DB_FILE = os.path.join(_TMP_DIR, "test.db").replace("\\", "/")
 
+# Opcional: correr la suite contra un PostgreSQL REAL y descartable
+# (TEST_DATABASE_URL=postgresql://usuario:clave@localhost:5432/dripgestion_test).
+# Por seguridad el nombre de la base DEBE terminar en "_test": cada test borra y recrea las tablas.
+_TEST_DB_URL = os.environ.get("TEST_DATABASE_URL")
+if _TEST_DB_URL:
+    assert _TEST_DB_URL.rstrip("/").split("/")[-1].split("?")[0].endswith("_test"), (
+        "TEST_DATABASE_URL debe apuntar a una base cuyo nombre termine en '_test'"
+    )
+
 # Se pisan siempre (las variables de entorno ganan sobre el .env).
-os.environ["SQLALCHEMY_DATABASE_URL"] = f"sqlite:///{_DB_FILE}"
+os.environ["SQLALCHEMY_DATABASE_URL"] = _TEST_DB_URL or f"sqlite:///{_DB_FILE}"
 os.environ["PROJECT_NAME"] = "DripGestion Tests"
 os.environ["SECRET_KEY"] = "clave-solo-para-tests-no-usar-en-produccion"
 os.environ["ALGORITHM"] = "HS256"
@@ -37,15 +46,19 @@ from app.models.producto import Producto, TipoEnvase  # noqa: E402
 from app.models.tenant import Tenant  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 
-assert engine.url.drivername.startswith("sqlite"), "La suite solo puede correr contra SQLite"
+ES_POSTGRES = engine.url.drivername.startswith("postgresql")
+assert engine.url.drivername.startswith("sqlite") or (ES_POSTGRES and bool(_TEST_DB_URL)), (
+    "La suite solo corre contra SQLite temporal o contra TEST_DATABASE_URL (base *_test)"
+)
 
-# Postgres hace cumplir las claves foráneas; SQLite no, salvo que se active.
-# Se activa para que los tests reflejen el comportamiento real en producción.
-@event.listens_for(engine, "connect")
-def _sqlite_fk_on(dbapi_connection, _record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+if not ES_POSTGRES:
+    # Postgres hace cumplir las claves foráneas; SQLite no, salvo que se active.
+    # Se activa para que los tests reflejen el comportamiento real en producción.
+    @event.listens_for(engine, "connect")
+    def _sqlite_fk_on(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 # bcrypt con pocas rondas: los tests no necesitan el costo de producción.

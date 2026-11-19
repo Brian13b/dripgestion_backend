@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from app.models.logistica import MetodoPago
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 class RecorridoBase(BaseModel):
   nombre: str
@@ -40,6 +40,18 @@ class MovimientoCreate(BaseModel):
   metodo_pago: MetodoPago
   observacion: Optional[str] = None
 
+  @model_validator(mode="after")
+  def _cuenta_corriente_no_se_cobra_en_el_acto(self):
+    """Una entrega a cuenta corriente es 100% fiado: lo que se cobra en el acto
+    se registra con su método (efectivo/transferencia). Evita cobros sin método,
+    que no sumaban en ninguna columna del cierre de caja."""
+    if self.metodo_pago == MetodoPago.CTA_CORRIENTE and self.monto_cobrado != 0:
+      raise ValueError(
+          "Una entrega a cuenta corriente no puede tener monto cobrado: "
+          "elegí efectivo o transferencia para la parte cobrada"
+      )
+    return self
+
   @field_validator("devoluciones_envases")
   @classmethod
   def _devoluciones_no_negativas(cls, v):
@@ -76,5 +88,5 @@ class MovimientoResponse(MovimientoCreate):
 
 class PagoManualCreate(BaseModel):
   monto: float = Field(gt=0)
-  metodo_pago: str
+  metodo_pago: Literal["efectivo", "transferencia"]
   observacion: str = ""

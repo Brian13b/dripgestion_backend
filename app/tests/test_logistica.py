@@ -275,7 +275,13 @@ def test_devolucion_directa_negativa_se_rechaza_422(mundo):
     assert mundo.client.post(f"{API}/movimientos", json=body, headers=mundo.h_admin_a).status_code == 422
 
 
-@bug("BUG-19", "el dinero se guarda en Float: los centavos se desvían y el saldo no vuelve a exactamente 0")
+def test_los_saldos_se_redondean_a_centavos_y_no_acumulan_error(db, mundo):
+    mundo.client.post(f"{API}/movimientos", json=mov(mundo.cli_a.id, 0.1, 0, "cta_corriente"), headers=mundo.h_admin_a)
+    for _ in range(3):
+        mundo.client.post(f"{API}/movimientos/pago/{mundo.cli_a.id}", json={"monto": 0.1, "metodo_pago": "efectivo"}, headers=mundo.h_admin_a)
+    assert estado(db, mundo.cli_a.id)[0] == -0.2
+
+
 def test_el_saldo_vuelve_exactamente_a_cero_con_centavos(db, mundo):
     mundo.client.post(f"{API}/movimientos", json=mov(mundo.cli_a.id, 0.3, 0, "cta_corriente"), headers=mundo.h_admin_a)
     mundo.client.post(f"{API}/movimientos/pago/{mundo.cli_a.id}", json={"monto": 0.1, "metodo_pago": "efectivo"}, headers=mundo.h_admin_a)
@@ -313,7 +319,6 @@ def test_pago_manual_con_monto_negativo_se_rechaza(db, mundo):
     assert res.status_code in (400, 422)
 
 
-@bug("BUG-20", "metodo_pago del pago manual es un str libre: un valor inválido termina en error 404/500 en vez de 422")
 def test_pago_manual_con_metodo_invalido_devuelve_422(db, mundo):
     cli = crear_cliente_db(db, mundo.ta.id, "Debe", "2615550072", saldo=1000)
     res = mundo.client.post(f"{API}/movimientos/pago/{cli.id}", json={"monto": 10, "metodo_pago": "bitcoin"}, headers=mundo.h_admin_a)
@@ -371,11 +376,23 @@ def test_resumen_del_mes_separa_efectivo_transferencia_y_deuda(db, mundo):
     assert res == {"efectivo": 1000, "transferencia": 500, "fiado": 700}
 
 
-@bug("BUG-21", "el cobro parcial de una entrega a cuenta corriente no se cuenta ni en efectivo ni en transferencia: la caja no cierra")
-def test_cierre_de_caja_incluye_cobros_parciales_de_cuenta_corriente(mundo):
-    mundo.client.post(f"{API}/movimientos", json=mov(mundo.cli_a.id, 1000, 400, "cta_corriente"), headers=mundo.h_admin_a)
+def test_entrega_a_cuenta_corriente_no_admite_cobro_en_el_acto_422(db, mundo):
+    """BUG-21 corregido: el cobro parcial debe declararse con su método, así la caja suma todo."""
+    res = mundo.client.post(f"{API}/movimientos", json=mov(mundo.cli_a.id, 1000, 400, "cta_corriente"), headers=mundo.h_admin_a)
+    assert res.status_code == 422
+    assert db.query(Movimiento).count() == 0
+
+
+def test_cobro_parcial_con_metodo_suma_en_el_cierre_de_caja(mundo):
+    mundo.client.post(f"{API}/movimientos", json=mov(mundo.cli_a.id, 1000, 400, "efectivo"), headers=mundo.h_admin_a)
     res = mundo.client.get(f"{API}/historial/mes-actual", headers=mundo.h_admin_a).json()
     assert res["efectivo"] + res["transferencia"] == 400
+    assert res["fiado"] == 600
+
+
+def test_pago_manual_no_acepta_cuenta_corriente_como_metodo(mundo):
+    res = mundo.client.post(f"{API}/movimientos/pago/{mundo.cli_a.id}", json={"monto": 10, "metodo_pago": "cta_corriente"}, headers=mundo.h_admin_a)
+    assert res.status_code == 422
 
 
 def test_aislamiento_de_resumen_mes(mundo):

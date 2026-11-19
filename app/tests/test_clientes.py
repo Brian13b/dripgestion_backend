@@ -101,15 +101,16 @@ def test_eliminar_cliente_borra_tambien_su_usuario(db, mundo):
 
 
 # ─── Bugs ─────────────────────────────────────────────────────────────────────
-@bug("BUG-07", "eliminar un cliente con movimientos viola la FK (500) y de borrarse perdería el historial contable")
-def test_eliminar_cliente_con_historial_no_rompe(mundo):
+def test_eliminar_cliente_con_historial_se_rechaza_con_409_y_conserva_todo(db, mundo):
     mov = {"cliente_id": mundo.cli_a.id, "detalles": {}, "monto_total": 100, "monto_cobrado": 0, "metodo_pago": "cta_corriente"}
     assert mundo.client.post(f"{API}/logistica/movimientos", json=mov, headers=mundo.h_admin_a).status_code == 200
     res = mundo.client.delete(f"{API}/clientes/{mundo.cli_a.id}", headers=mundo.h_admin_a)
-    assert res.status_code in (200, 400, 409)
+    assert res.status_code == 409 and "historial" in res.json()["detail"]
+    db.expire_all()
+    assert db.get(Cliente, mundo.cli_a.id) is not None and db.get(User, mundo.cli_a.user_id) is not None
+    assert mundo.client.get("/api/v1/logistica/historial", headers=mundo.h_admin_a).json()[0]["cliente"] == "Kiosco A"
 
 
-@bug("BUG-10", "el username del usuario de portal (teléfono) es único GLOBAL: el mismo teléfono en otra empresa da 500")
 def test_mismo_telefono_puede_ser_cliente_de_dos_empresas(mundo):
     body = {**BASE, "telefono": mundo.cli_a.telefono}  # ya existe en la empresa A
     assert mundo.client.post(f"{API}/clientes", json=body, headers=mundo.h_admin_b).status_code == 200
