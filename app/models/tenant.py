@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean
+from app.core import branding
 from app.db.base import Base
 
 class Tenant(Base):
@@ -12,13 +13,13 @@ class Tenant(Base):
     # --- Branding Dinámico ---
     logo_url = Column(String, nullable=True)
     logo_public_id = Column(String, nullable=True)
-    font_sans = Column(String, default="'Inter', sans-serif")
-    color_primario = Column(String, default="#25A7DA")
-    color_primario_light = Column(String, default="#00ACC1")
-    color_primario_dark = Column(String, default="#0C4A6E")
-    color_background = Column(String, default="#F0FDFA")
-    color_success = Column(String, default="#10b981")
-    color_danger = Column(String, default="#ef4444")
-    color_secondary = Column(String, default="#64748b")
+    font_sans = Column(String, default=branding.FONT_SANS)
+    color_primario = Column(String, default=branding.COLOR_PRIMARIO)
+    color_primario_light = Column(String, default=branding.COLOR_PRIMARIO_LIGHT)
+    color_primario_dark = Column(String, default=branding.COLOR_PRIMARIO_DARK)
+    color_background = Column(String, default=branding.COLOR_BACKGROUND)
+    color_success = Column(String, default=branding.COLOR_SUCCESS)
+    color_danger = Column(String, default=branding.COLOR_DANGER)
+    color_secondary = Column(String, default=branding.COLOR_SECONDARY)
     
     is_active = Column(Boolean, default=True)

@@ -75,6 +75,10 @@ def registrar_movimiento(mov_in: schemas.MovimientoCreate, db: Session = Depends
         return logistica_service.registrar_entrega(db, mov_in, current_user, current_user.tenant_id, idempotency_key)
     except logistica_service.ClaveIdempotenciaReutilizada as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except logistica_service.PermisoDenegado as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except logistica_service.NoEncontrado as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -85,8 +89,12 @@ def registrar_pago_manual(cliente_id: int, pago_in: PagoManualCreate, db: Sessio
         return logistica_service.registrar_pago_manual(db, cliente_id, pago_in, current_user, current_user.tenant_id, idempotency_key)
     except logistica_service.ClaveIdempotenciaReutilizada as e:
         raise HTTPException(status_code=409, detail=str(e))
-    except ValueError as e:
+    except logistica_service.PermisoDenegado as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except logistica_service.NoEncontrado as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/historial")
 def get_historial_por_fecha(fecha: Optional[date] = None, chofer_id: Optional[int] = None, recorrido_id: Optional[int] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_staff)):

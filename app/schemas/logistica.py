@@ -40,6 +40,9 @@ class MovimientoCreate(BaseModel):
   metodo_pago: MetodoPago
   observacion: Optional[str] = None
 
+  # El repartidor declara que el cliente no esta en el recorrido (visita excepcional).
+  visita_excepcional: bool = False
+
   @model_validator(mode="after")
   def _cuenta_corriente_no_se_cobra_en_el_acto(self):
     """Una entrega a cuenta corriente es 100% fiado: lo que se cobra en el acto

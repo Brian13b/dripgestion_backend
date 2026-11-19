@@ -102,7 +102,7 @@ def test_eliminar_cliente_borra_tambien_su_usuario(db, mundo):
 
 # ─── Bugs ─────────────────────────────────────────────────────────────────────
 def test_eliminar_cliente_con_historial_se_rechaza_con_409_y_conserva_todo(db, mundo):
-    mov = {"cliente_id": mundo.cli_a.id, "detalles": {}, "monto_total": 100, "monto_cobrado": 0, "metodo_pago": "cta_corriente"}
+    mov = {"cliente_id": mundo.cli_a.id, "detalles": {str(mundo.soda_a.id): {"entregado": 1}}, "monto_total": 100, "monto_cobrado": 0, "metodo_pago": "cta_corriente"}
     assert mundo.client.post(f"{API}/logistica/movimientos", json=mov, headers=mundo.h_admin_a).status_code == 200
     res = mundo.client.delete(f"{API}/clientes/{mundo.cli_a.id}", headers=mundo.h_admin_a)
     assert res.status_code == 409 and "historial" in res.json()["detail"]

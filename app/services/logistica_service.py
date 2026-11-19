@@ -14,6 +14,14 @@ from sqlalchemy.orm import Session
 from app.models.logistica import Movimiento
 
 
+class PermisoDenegado(ValueError):
+  """El usuario no puede operar sobre ese recurso (HTTP 403)."""
+
+
+class NoEncontrado(ValueError):
+  """El recurso no existe en la empresa del usuario (HTTP 404)."""
+
+
 class ClaveIdempotenciaReutilizada(ValueError):
   """La misma Idempotency-Key se usó para otra operación distinta (otro cliente)."""
 
@@ -62,6 +70,10 @@ def _centavos(valor) -> float:
   return float(Decimal(str(valor or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def _ids_clientes_del_recorrido(recorrido: Recorrido) -> list:
+  return [int(c) for c in recorrido.clientes_orden] if recorrido.clientes_orden else []
+
+
 def _validar_cliente_en_rutas_de_repartidor(
     db: Session, cliente_id: int, repartidor_id: int, tenant_id: int
 ):
@@ -83,7 +95,7 @@ def _validar_cliente_en_rutas_de_repartidor(
     if cliente_id in orden:
       return
 
-  raise ValueError(
+  raise PermisoDenegado(
       "No tenés permiso para operar con este cliente. No está asignado en"
       " ninguna de tus rutas."
   )
@@ -99,7 +111,7 @@ def registrar_entrega(
   cliente = _query_cliente_bloqueado(db, mov_in.cliente_id, tenant_id).first()
 
   if not cliente:
-    raise ValueError("Cliente no encontrado")
+    raise NoEncontrado("Cliente no encontrado")
 
   # Reintento (por mala señal, doble toque, etc.): se devuelve lo ya registrado
   # SIN volver a sumar deuda, envases ni movimientos. Se chequea con el cliente
@@ -111,8 +123,11 @@ def registrar_entrega(
     return repetido
 
   repartidor_id = current_user.id
+  es_excepcion = False
 
   if mov_in.recorrido_id:
+    # Cliente y recorrido se buscan SIEMPRE dentro de la empresa del usuario: un id
+    # de otra empresa responde "no encontrado" (nunca se mezclan empresas).
     recorrido = (
         db.query(Recorrido)
         .filter(
@@ -123,13 +138,23 @@ def registrar_entrega(
     )
 
     if not recorrido:
-      raise ValueError("Recorrido no encontrado")
+      raise NoEncontrado("Recorrido no encontrado")
 
     if current_user.role != UserRole.ADMIN:
       if recorrido.repartidor_id != current_user.id:
-        raise ValueError(
+        raise PermisoDenegado(
             "No tenés permiso para registrar movimientos en este recorrido"
         )
+
+    if mov_in.cliente_id not in _ids_clientes_del_recorrido(recorrido):
+      # BUG-17: el cliente es de la empresa pero no esta en este recorrido.
+      # Solo es valido como visita excepcional declarada de forma explicita.
+      if not mov_in.visita_excepcional and current_user.role != UserRole.ADMIN:
+        raise PermisoDenegado(
+            "Este cliente no está en el recorrido. Para atenderlo hay que"
+            " registrarlo como visita excepcional."
+        )
+      es_excepcion = True
 
     repartidor_id = recorrido.repartidor_id or current_user.id
   elif current_user.role != UserRole.ADMIN:
@@ -185,8 +210,13 @@ def registrar_entrega(
       stock_actualizado[clave_envase] = max(0, nuevo_saldo_envase)
 
     # El total nunca puede superar el valor de lo entregado según el catálogo
-    # (sí puede ser menor: descuentos). Se valida solo si hay productos en el detalle.
-    if mov_in.detalles and mov_in.monto_total > subtotal_catalogo + 0.01:
+    # (sí puede ser menor: descuentos). BUG-18: con el detalle vacío el respaldo es 0,
+    # así que no se admite un monto positivo sin ítems que lo justifiquen.
+    if mov_in.monto_total > subtotal_catalogo + 0.01:
+      if not subtotal_catalogo:
+        raise ValueError(
+            "No se puede registrar un total sin productos entregados: el detalle está vacío"
+        )
       raise ValueError(
           "El total no puede superar el valor de los productos entregados según el catálogo"
       )
@@ -215,6 +245,9 @@ def registrar_entrega(
     db.add(cliente)
 
     # --- Persistencia del movimiento ---
+    observacion = mov_in.observacion
+    if es_excepcion:
+      observacion = f"[Visita excepcional] {observacion or ''}".strip()
     detalles_guardar = dict(mov_in.detalles)
     if mov_in.devoluciones_envases:
       detalles_guardar["_devoluciones_envases"] = mov_in.devoluciones_envases
@@ -228,8 +261,9 @@ def registrar_entrega(
         "monto_total": monto_total,
         "monto_cobrado": monto_cobrado,
         "metodo_pago": mov_in.metodo_pago,
-        "observacion": mov_in.observacion,
+        "observacion": observacion,
         "idempotency_key": idempotency_key,
+        "visita_excepcional": es_excepcion,
     }
     movimiento_creado = crud_logistica.create_movimiento(db, mov_data)
     db.commit()
@@ -265,7 +299,7 @@ def registrar_pago_manual(
 ):
   cliente = _query_cliente_bloqueado(db, cliente_id, tenant_id).first()
   if not cliente:
-    raise ValueError("Cliente no encontrado")
+    raise NoEncontrado("Cliente no encontrado")
 
   repetido = _repetido_o_none(db, tenant_id, idempotency_key, cliente_id)
   if repetido is not None:
@@ -365,6 +399,7 @@ def obtener_historial_dia(
         "monto_cobrado": mov.monto_cobrado,
         "resumen_productos": texto_productos,
         "observacion": mov.observacion,
+        "visita_excepcional": bool(mov.visita_excepcional),
     })
 
   return resultados
@@ -395,8 +430,15 @@ def obtener_resumen_mes(db: Session, user: Any):
       or 0.0
   )
 
+  excepcionales = [m for m in movimientos if m.visita_excepcional]
+
   return {
       "efectivo": efectivo,
       "transferencia": transferencia,
       "fiado": _centavos(deuda_en_calle),
+      # Auditoría: visitas fuera de recorrido y lo cobrado en ellas (ya incluido arriba).
+      "visitas_excepcionales": len(excepcionales),
+      "cobrado_en_visitas_excepcionales": _centavos(
+          sum(m.monto_cobrado for m in excepcionales)
+      ),
   }

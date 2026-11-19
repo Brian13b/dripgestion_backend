@@ -206,3 +206,39 @@ def test_fallo_de_cloudinary_devuelve_500_controlado(monkeypatch, mundo):
     monkeypatch.setattr(cloudinary_service, "subir_logo", explota)
     res = _subir(mundo, PNG)
     assert res.status_code == 500 and "cloudinary" not in res.json()["detail"].lower()
+
+
+# ─── Paleta por defecto: marca DripGestión (naranja cálido), no el azul anterior ──
+PALETA_CALIDA = {
+    "color_primario": "#E86A1F",
+    "color_primario_light": "#F5A474",
+    "color_primario_dark": "#1C1917",
+    "color_background": "#F7F4F0",
+    "color_success": "#16a34a",
+    "color_danger": "#dc2626",
+    "color_secondary": "#78716c",
+}
+
+
+def test_empresa_nueva_por_onboarding_nace_con_la_paleta_calida(mundo):
+    res = mundo.client.post(f"{API}/onboarding", json=ALTA, headers=mundo.h_super)
+    assert res.status_code == 200, res.text
+    assert {k: res.json()[k] for k in PALETA_CALIDA} == PALETA_CALIDA
+
+
+def test_onboarding_respeta_el_color_elegido_y_completa_el_resto_con_la_marca(mundo):
+    res = mundo.client.post(f"{API}/onboarding", json={**ALTA, "color_primario": "#123456"}, headers=mundo.h_super)
+    assert res.json()["color_primario"] == "#123456" and res.json()["color_primario_light"] == "#F5A474"
+
+
+def test_empresa_creada_en_base_sin_colores_usa_la_paleta_calida(db):
+    from app.tests.conftest import crear_tenant
+    t = crear_tenant(db, "Directa", "directa")
+    assert {k: getattr(t, k) for k in PALETA_CALIDA} == PALETA_CALIDA
+
+
+def test_las_migraciones_tienen_una_sola_cabeza():
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    cfg = Config("alembic.ini")
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["d2f6b9a47c13"]

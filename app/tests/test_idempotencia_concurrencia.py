@@ -20,7 +20,7 @@ from app.main import app
 from app.models.cliente import Cliente
 from app.models.logistica import Movimiento
 from app.services import logistica_service
-from app.tests.conftest import ES_POSTGRES, crear_cliente_db, crear_producto
+from app.tests.conftest import ES_POSTGRES, detalle_para_total, crear_cliente_db, crear_producto
 
 API = "/api/v1/logistica"
 
@@ -30,7 +30,7 @@ def clave():
 
 
 def mov(cliente_id, total=0, cobrado=0, metodo="efectivo", detalles=None):
-    return {"cliente_id": cliente_id, "detalles": detalles or {}, "monto_total": total, "monto_cobrado": cobrado, "metodo_pago": metodo}
+    return {"cliente_id": cliente_id, "detalles": detalles or detalle_para_total(total), "monto_total": total, "monto_cobrado": cobrado, "metodo_pago": metodo}
 
 
 def post_mov(mundo, body, key=None, headers=None):
@@ -86,7 +86,7 @@ def test_la_misma_clave_para_otro_cliente_es_conflicto_409(db, mundo):
 def test_la_clave_es_por_empresa_dos_empresas_pueden_usar_la_misma(db, mundo):
     k = clave()
     assert post_mov(mundo, mov(mundo.cli_a.id, 100, 0, "cta_corriente"), k).status_code == 200
-    assert post_mov(mundo, mov(mundo.cli_b.id, 100, 0, "cta_corriente"), k, mundo.h_admin_b).status_code == 200
+    assert post_mov(mundo, mov(mundo.cli_b.id, 100, 0, "cta_corriente", {str(mundo.soda_b.id): {"entregado": 1}}), k, mundo.h_admin_b).status_code == 200
     assert db.query(Movimiento).count() == 2
 
 
@@ -225,3 +225,26 @@ def test_el_saldo_siempre_coincide_con_los_movimientos_bajo_carga_paralela(db, m
     saldo, stock = estado(db, cli.id)
     assert saldo == esperado
     assert stock.get(str(mundo.envase_a.id), 0) == len(movs)  # un envase por entrega registrada
+
+
+# ─── Caja: los reintentos no inflan el cierre ni el historial ─────────────────
+def test_reintentos_no_inflan_el_cierre_de_caja_ni_el_historial(db, mundo):
+    k = clave()
+    for _ in range(3):
+        assert post_mov(mundo, mov(mundo.cli_a.id, 800, 500), k).status_code == 200
+    caja = mundo.client.get(f"{API}/historial/mes-actual", headers=mundo.h_admin_a).json()
+    assert caja["efectivo"] == 500 and caja["fiado"] == 300
+    assert len(mundo.client.get(f"{API}/historial", headers=mundo.h_admin_a).json()) == 1
+
+
+def test_reintento_de_una_visita_excepcional_se_cuenta_una_sola_vez(db, mundo):
+    from app.tests.conftest import crear_recorrido_db
+    cli_x = crear_cliente_db(db, mundo.ta.id, "Fuera", "2615550447")
+    ruta = crear_recorrido_db(db, mundo.ta.id, "Mía", [mundo.cli_a.id], mundo.rep_a.id)
+    body = {**mov(cli_x.id, 800, 800), "recorrido_id": ruta.id, "visita_excepcional": True}
+    k = clave()
+    for _ in range(2):
+        assert post_mov(mundo, body, k, mundo.h_rep_a).status_code == 200
+    caja = mundo.client.get(f"{API}/historial/mes-actual", headers=mundo.h_admin_a).json()
+    assert caja["visitas_excepcionales"] == 1 and caja["cobrado_en_visitas_excepcionales"] == 800
+    assert estado(db, cli_x.id)[0] == 0
