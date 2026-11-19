@@ -22,6 +22,8 @@ class Cliente(Base):
   direccion = Column(String, nullable=False)
   telefono = Column(String, nullable=True)
   observaciones = Column(String, nullable=True)
+  # Zona / barrio para agrupar y filtrar clientes (texto libre, opcional)
+  zona = Column(String(60), nullable=True, index=True)
 
   # Geolocalización para mapa de reparto
   latitud = Column(Float, nullable=True)

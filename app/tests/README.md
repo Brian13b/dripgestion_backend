@@ -42,6 +42,7 @@ fallo ("XPASS strict") para que se quite el decorador.
 | `test_salud_y_seguridad.py` | `/`, `/health`, OpenAPI, CORS, superadmin inicial. |
 | `test_zona_horaria.py` | Día de caja en hora local (corte a las 00:00 de Argentina), fin de mes y de año nocturnos, "hoy" del negocio, hora y fecha mostradas en historial y portal. |
 | `test_idempotencia_concurrencia.py` | Reintentos con `Idempotency-Key` (entregas y pagos), conflicto entre clientes, aislamiento por empresa, peticiones simultáneas con la misma clave, bloqueo de fila (`FOR UPDATE`) y prueba de carga contable (solo PostgreSQL). |
+| `test_turnos.py` | Calendario operativo: alta con 1–3 repartidores y un conductor, validaciones, choques de horario, programación en lote (3 meses), omisiones, deshacer, aislamiento por empresa, permisos y operación habilitada por el turno de hoy. |
 | `test_api.py` | Tests previos del proyecto (humo, rutas protegidas, flujo de entrega). Se volvió hermético: antes dependía de que el producto ID 1 existiera en la base de desarrollo. |
 
 ## Limitaciones

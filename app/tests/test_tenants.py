@@ -241,4 +241,4 @@ def test_las_migraciones_tienen_una_sola_cabeza():
     from alembic.config import Config
     from alembic.script import ScriptDirectory
     cfg = Config("alembic.ini")
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["d2f6b9a47c13"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["f4b8d2e6a913"]

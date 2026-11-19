@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime, time
 from typing import Any, Dict, List, Literal, Optional
-from app.models.logistica import MetodoPago
+from app.models.logistica import MetodoPago, RolTurno
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 class RecorridoBase(BaseModel):
@@ -16,7 +16,8 @@ class RecorridoUpdate(BaseModel):
   clientes_orden: Optional[List[int]] = None
 
 class RecorridoAsignarRepartidor(BaseModel):
-  repartidor_id: int
+  # None = dejar la ruta sin chofer habitual
+  repartidor_id: Optional[int] = None
 
 class RecorridoResponse(RecorridoBase):
   id: int
@@ -93,3 +94,92 @@ class PagoManualCreate(BaseModel):
   monto: float = Field(gt=0)
   metodo_pago: Literal["efectivo", "transferencia"]
   observacion: str = ""
+
+
+# --- CALENDARIO OPERATIVO (turnos) ---
+class TurnoRepartidorIn(BaseModel):
+  user_id: int
+  rol: RolTurno = RolTurno.AYUDANTE
+
+
+def _validar_equipo_y_horas(desde, hasta, repartidores):
+  if desde is not None and hasta is not None and desde >= hasta:
+    raise ValueError("La hora de inicio debe ser anterior a la de fin")
+  if repartidores is not None:
+    if not 1 <= len(repartidores) <= 3:
+      raise ValueError("Un turno lleva de 1 a 3 repartidores")
+    if len({r.user_id for r in repartidores}) != len(repartidores):
+      raise ValueError("Un repartidor no puede repetirse en el mismo turno")
+    if sum(1 for r in repartidores if r.rol == RolTurno.CONDUCTOR) != 1:
+      raise ValueError("El turno necesita exactamente un conductor; los demás ayudan a descargar")
+
+
+class TurnoBase(BaseModel):
+  hora_desde: time
+  hora_hasta: time
+  repartidores: List[TurnoRepartidorIn]
+  nota: Optional[str] = Field(default=None, max_length=200)
+
+  @model_validator(mode="after")
+  def _validar(self):
+    _validar_equipo_y_horas(self.hora_desde, self.hora_hasta, self.repartidores)
+    return self
+
+
+class TurnoCreate(TurnoBase):
+  recorrido_id: int
+  fecha: date
+
+
+class TurnoUpdate(BaseModel):
+  hora_desde: Optional[time] = None
+  hora_hasta: Optional[time] = None
+  repartidores: Optional[List[TurnoRepartidorIn]] = None
+  nota: Optional[str] = Field(default=None, max_length=200)
+
+  @model_validator(mode="after")
+  def _validar(self):
+    _validar_equipo_y_horas(self.hora_desde, self.hora_hasta, self.repartidores)
+    return self
+
+
+class ProgramarTurnos(TurnoBase):
+  """Programación en lote: la ruta sale los `dias_semana` (0=lunes … 6=domingo) entre dos fechas."""
+  recorrido_id: int
+  fecha_desde: date
+  fecha_hasta: date
+  dias_semana: List[int] = Field(min_length=1)
+
+  @field_validator("dias_semana")
+  @classmethod
+  def _dias_validos(cls, v):
+    if any(d < 0 or d > 6 for d in v):
+      raise ValueError("Los días de la semana van de 0 (lunes) a 6 (domingo)")
+    return sorted(set(v))
+
+
+class TurnoRepartidorOut(BaseModel):
+  user_id: int
+  nombre: str
+  rol: RolTurno
+
+
+class TurnoResponse(BaseModel):
+  id: int
+  recorrido_id: int
+  recorrido_nombre: str
+  fecha: date
+  hora_desde: time
+  hora_hasta: time
+  nota: Optional[str] = None
+  repartidores: List[TurnoRepartidorOut]
+
+
+class OmisionProgramacion(BaseModel):
+  fecha: date
+  motivo: str
+
+
+class ProgramarTurnosResponse(BaseModel):
+  creados: int
+  omitidos: List[OmisionProgramacion]

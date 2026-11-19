@@ -3,6 +3,7 @@ from .user import UserBase, UserCreate, UserResponse
 from .cliente import ClienteCreate, ClienteUpdate, ClienteResponse, ClienteListResponse
 from .logistica import (
     RecorridoCreate, RecorridoUpdate, RecorridoResponse, 
-    MovimientoCreate, MovimientoResponse
+    MovimientoCreate, MovimientoResponse,
+    TurnoCreate, TurnoUpdate, TurnoResponse, ProgramarTurnos, ProgramarTurnosResponse
 )
 from .tenant import (TenantBase, TenantCreate, TenantResponse, TenantUpdate)

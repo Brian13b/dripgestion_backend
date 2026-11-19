@@ -91,7 +91,6 @@ def test_eliminar_recorrido_con_movimientos_no_rompe(db, mundo):
     assert mundo.client.delete(f"{API}/recorridos/{ruta.id}", headers=mundo.h_admin_a).status_code in (200, 400, 409)
 
 
-@bug("BUG-16", "no se puede desasignar un repartidor: el schema exige repartidor_id:int aunque el CRUD soporta None")
 def test_se_puede_desasignar_repartidor(db, mundo):
     ruta = crear_recorrido_db(db, mundo.ta.id, "R", [], mundo.rep_a.id)
     res = mundo.client.patch(f"{API}/recorridos/{ruta.id}/asignar-repartidor", json={"repartidor_id": None}, headers=mundo.h_admin_a)
