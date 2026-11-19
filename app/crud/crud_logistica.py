@@ -18,9 +18,11 @@ def get_recorridos_by_tenant(db: Session, tenant_id: int):
 
 def get_recorridos_smart(db: Session, user: Any):
     if user.role != UserRole.ADMIN:
+        from app.services import turno_service  # import tardio: evita ciclo crud <-> services
+        con_turno_hoy = turno_service.recorridos_con_turno_hoy(db, user.tenant_id, user.id)
         return db.query(Recorrido).filter(
             Recorrido.tenant_id == user.tenant_id,
-            Recorrido.repartidor_id == user.id
+            (Recorrido.repartidor_id == user.id) | (Recorrido.id.in_(con_turno_hoy)),
         ).all()
     
     return db.query(Recorrido).filter(Recorrido.tenant_id == user.tenant_id).all()

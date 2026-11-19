@@ -144,3 +144,29 @@ def test_pin_no_se_guarda_en_texto_plano(db, mundo):
 def test_editar_cliente_con_direccion_nula_se_rechaza(mundo):
     res = mundo.client.put(f"{API}/clientes/{mundo.cli_a.id}", json={"direccion": None}, headers=mundo.h_admin_a)
     assert res.status_code in (400, 422)
+
+
+
+# ─── Zona (filtro de la lista de clientes) ────────────────────────────────────
+def test_cliente_se_crea_con_zona_normalizada(mundo):
+    body = {"nombre_negocio": "Con zona", "direccion": "Calle 1", "telefono": "2615557001", "zona": "  Godoy   Cruz "}
+    res = mundo.client.post(f"{API}/clientes", json=body, headers=mundo.h_admin_a)
+    assert res.status_code == 200 and res.json()["zona"] == "Godoy Cruz"
+
+
+def test_zona_vacia_es_sin_zona_y_se_puede_editar_y_borrar(mundo):
+    res = mundo.client.put(f"{API}/clientes/{mundo.cli_a.id}", json={"zona": "Centro"}, headers=mundo.h_admin_a)
+    assert res.json()["zona"] == "Centro"
+    res = mundo.client.put(f"{API}/clientes/{mundo.cli_a.id}", json={"zona": "   "}, headers=mundo.h_admin_a)
+    assert res.status_code == 200 and res.json()["zona"] is None
+
+
+def test_zona_demasiado_larga_se_rechaza(mundo):
+    res = mundo.client.put(f"{API}/clientes/{mundo.cli_a.id}", json={"zona": "x" * 61}, headers=mundo.h_admin_a)
+    assert res.status_code == 422
+
+
+def test_la_lista_de_clientes_devuelve_la_zona(mundo):
+    mundo.client.put(f"{API}/clientes/{mundo.cli_a.id}", json={"zona": "Norte"}, headers=mundo.h_admin_a)
+    items = mundo.client.get(f"{API}/clientes", headers=mundo.h_admin_a).json()["items"]
+    assert [c["zona"] for c in items] == ["Norte"]

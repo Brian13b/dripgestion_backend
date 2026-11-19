@@ -7,7 +7,8 @@ from app.api import deps
 from app.core.timezone import hoy_local
 from app.db.session import get_db
 from app.schemas.logistica import PagoManualCreate, RecorridoAsignarRepartidor
-from app.services import logistica_service
+from app.services import logistica_service, turno_service
+from app.services.errores import Conflicto, NoEncontrado, PermisoDenegado
 from app.crud import crud_logistica
 
 router = APIRouter()
@@ -27,7 +28,9 @@ def get_recorrido_by_id(recorrido_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=404, detail="Recorrido no encontrado")
 
     if current_user.role == models.user.UserRole.REPARTIDOR:
-        if recorrido.repartidor_id != current_user.id:
+        if recorrido.repartidor_id != current_user.id and not turno_service.repartidor_tiene_turno_hoy(
+            db, current_user.tenant_id, recorrido.id, current_user.id
+        ):
             raise HTTPException(status_code=403, detail="No tenés permiso para ver este recorrido")
 
     return recorrido
@@ -112,3 +115,62 @@ def get_resumen_mes_actual(db: Session = Depends(get_db), current_admin: models.
         return logistica_service.obtener_resumen_mes(db, current_admin)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+
+
+# ─── Calendario operativo (turnos) ────────────────────────────────────────────
+def _http(e: ValueError) -> HTTPException:
+    if isinstance(e, NoEncontrado):
+        return HTTPException(status_code=404, detail=str(e))
+    if isinstance(e, Conflicto):
+        return HTTPException(status_code=409, detail=str(e))
+    if isinstance(e, PermisoDenegado):
+        return HTTPException(status_code=403, detail=str(e))
+    return HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/turnos", response_model=List[schemas.TurnoResponse])
+def listar_turnos(desde: date, hasta: date, recorrido_id: Optional[int] = None, repartidor_id: Optional[int] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_staff)):
+    """Turnos entre dos fechas (máx. 93 días). El repartidor solo ve los suyos."""
+    try:
+        return turno_service.listar_turnos(db, current_user, desde, hasta, recorrido_id, repartidor_id)
+    except ValueError as e:
+        raise _http(e)
+
+@router.post("/turnos", response_model=schemas.TurnoResponse)
+def crear_turno(turno_in: schemas.TurnoCreate, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+    try:
+        return turno_service.crear_turno(db, current_admin.tenant_id, turno_in)
+    except ValueError as e:
+        raise _http(e)
+
+@router.post("/turnos/programar", response_model=schemas.ProgramarTurnosResponse)
+def programar_turnos(data: schemas.ProgramarTurnos, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+    """Programa turnos en lote (por ejemplo, los próximos meses). Lo ocupado se omite y se informa."""
+    try:
+        return turno_service.programar_turnos(db, current_admin.tenant_id, data)
+    except ValueError as e:
+        raise _http(e)
+
+@router.delete("/turnos")
+def eliminar_turnos_en_rango(recorrido_id: int, desde: date, hasta: date, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+    """Deshace una programación: borra los turnos futuros de la ruta entre dos fechas."""
+    try:
+        return {"eliminados": turno_service.eliminar_turnos_en_rango(db, current_admin.tenant_id, recorrido_id, desde, hasta)}
+    except ValueError as e:
+        raise _http(e)
+
+@router.put("/turnos/{turno_id}", response_model=schemas.TurnoResponse)
+def actualizar_turno(turno_id: int, turno_in: schemas.TurnoUpdate, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+    try:
+        return turno_service.actualizar_turno(db, current_admin.tenant_id, turno_id, turno_in)
+    except ValueError as e:
+        raise _http(e)
+
+@router.delete("/turnos/{turno_id}")
+def eliminar_turno(turno_id: int, db: Session = Depends(get_db), current_admin: models.user.User = Depends(deps.get_current_admin)):
+    try:
+        turno_service.eliminar_turno(db, current_admin.tenant_id, turno_id)
+        return {"message": "Turno eliminado"}
+    except ValueError as e:
+        raise _http(e)

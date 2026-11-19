@@ -7,19 +7,13 @@ from app.models.cliente import Cliente
 from app.models.logistica import Recorrido
 from app.models.producto import Producto, TipoEnvase
 from app.models.user import UserRole
+from app.services.errores import NoEncontrado, PermisoDenegado  # noqa: F401  (re-exportados)
+from app.services import turno_service
 from app.schemas.logistica import MovimientoCreate, PagoManualCreate
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.models.logistica import Movimiento
-
-
-class PermisoDenegado(ValueError):
-  """El usuario no puede operar sobre ese recurso (HTTP 403)."""
-
-
-class NoEncontrado(ValueError):
-  """El recurso no existe en la empresa del usuario (HTTP 404)."""
 
 
 class ClaveIdempotenciaReutilizada(ValueError):
@@ -77,11 +71,13 @@ def _ids_clientes_del_recorrido(recorrido: Recorrido) -> list:
 def _validar_cliente_en_rutas_de_repartidor(
     db: Session, cliente_id: int, repartidor_id: int, tenant_id: int
 ):
+  # Rutas propias (chofer habitual) + rutas donde tiene un turno programado HOY.
+  con_turno_hoy = turno_service.recorridos_con_turno_hoy(db, tenant_id, repartidor_id)
   recorridos = (
       db.query(Recorrido)
       .filter(
           Recorrido.tenant_id == tenant_id,
-          Recorrido.repartidor_id == repartidor_id,
+          (Recorrido.repartidor_id == repartidor_id) | (Recorrido.id.in_(con_turno_hoy)),
       )
       .all()
   )
@@ -141,7 +137,10 @@ def registrar_entrega(
       raise NoEncontrado("Recorrido no encontrado")
 
     if current_user.role != UserRole.ADMIN:
-      if recorrido.repartidor_id != current_user.id:
+      es_chofer_habitual = recorrido.repartidor_id == current_user.id
+      if not es_chofer_habitual and not turno_service.repartidor_tiene_turno_hoy(
+          db, tenant_id, recorrido.id, current_user.id
+      ):
         raise PermisoDenegado(
             "No tenés permiso para registrar movimientos en este recorrido"
         )
@@ -156,7 +155,8 @@ def registrar_entrega(
         )
       es_excepcion = True
 
-    repartidor_id = recorrido.repartidor_id or current_user.id
+    # Queda registrado quien hizo la operacion (puede ser uno de los ayudantes del turno).
+    repartidor_id = current_user.id if current_user.role != UserRole.ADMIN else (recorrido.repartidor_id or current_user.id)
   elif current_user.role != UserRole.ADMIN:
     _validar_cliente_en_rutas_de_repartidor(
         db, mov_in.cliente_id, current_user.id, tenant_id
