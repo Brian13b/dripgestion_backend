@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel
+from app.core import branding
 
 class TenantBase(BaseModel):
     nombre: str
@@ -8,14 +9,14 @@ class TenantBase(BaseModel):
     logo_url: Optional[str] = None
     logo_public_id: Optional[str] = None
     is_active: bool = True
-    font_sans: Optional[str] = "'Inter', sans-serif"
-    color_primario: Optional[str] = "#25A7DA"
-    color_primario_light: Optional[str] = "#00ACC1"
-    color_primario_dark: Optional[str] = "#0C4A6E"
-    color_background: Optional[str] = "#F0FDFA"
-    color_success: Optional[str] = "#10b981"
-    color_danger: Optional[str] = "#ef4444"
-    color_secondary: Optional[str] = "#64748b"
+    font_sans: Optional[str] = branding.FONT_SANS
+    color_primario: Optional[str] = branding.COLOR_PRIMARIO
+    color_primario_light: Optional[str] = branding.COLOR_PRIMARIO_LIGHT
+    color_primario_dark: Optional[str] = branding.COLOR_PRIMARIO_DARK
+    color_background: Optional[str] = branding.COLOR_BACKGROUND
+    color_success: Optional[str] = branding.COLOR_SUCCESS
+    color_danger: Optional[str] = branding.COLOR_DANGER
+    color_secondary: Optional[str] = branding.COLOR_SECONDARY
 
 class TenantCreate(TenantBase):
     nombre: Optional[str] = None
@@ -53,7 +54,7 @@ class TenantOnboardingCreate(BaseModel):
   nombre: str
   subdominio: str
   whatsapp: Optional[str] = None
-  color_primario: Optional[str] = "#25A7DA"
+  color_primario: Optional[str] = branding.COLOR_PRIMARIO
 
   admin_username: str
   admin_password: str

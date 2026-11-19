@@ -77,10 +77,10 @@ def test_no_se_puede_asignar_repartidor_de_otra_empresa_400(db, mundo):
     assert res.status_code == 400
 
 
-def test_movimiento_sobre_cliente_de_otra_empresa_400(mundo):
-    mov = {"cliente_id": mundo.cli_b.id, "detalles": {}, "monto_total": 100, "monto_cobrado": 0, "metodo_pago": "efectivo"}
+def test_movimiento_sobre_cliente_de_otra_empresa_404(mundo):
+    mov = {"cliente_id": mundo.cli_b.id, "detalles": {}, "monto_total": 0, "monto_cobrado": 0, "metodo_pago": "efectivo"}
     res = mundo.client.post(f"{API}/logistica/movimientos", json=mov, headers=mundo.h_admin_a)
-    assert res.status_code == 400
+    assert res.status_code == 404
     assert "no encontrado" in res.json()["detail"].lower()
 
 
@@ -103,8 +103,8 @@ def test_pago_manual_sobre_cliente_de_otra_empresa_404(mundo):
 
 
 def test_historial_solo_muestra_movimientos_propios(mundo):
-    for h, cli in ((mundo.h_admin_a, mundo.cli_a), (mundo.h_admin_b, mundo.cli_b)):
-        mov = {"cliente_id": cli.id, "detalles": {}, "monto_total": 100, "monto_cobrado": 100, "metodo_pago": "efectivo"}
+    for h, cli, prod in ((mundo.h_admin_a, mundo.cli_a, mundo.soda_a), (mundo.h_admin_b, mundo.cli_b, mundo.soda_b)):
+        mov = {"cliente_id": cli.id, "detalles": {str(prod.id): {"entregado": 1}}, "monto_total": 100, "monto_cobrado": 100, "metodo_pago": "efectivo"}
         assert mundo.client.post(f"{API}/logistica/movimientos", json=mov, headers=h).status_code == 200
     res = mundo.client.get(f"{API}/logistica/historial", headers=mundo.h_admin_a).json()
     assert [m["cliente"] for m in res] == ["Kiosco A"]

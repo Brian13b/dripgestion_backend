@@ -186,6 +186,18 @@ def login(client, username, tenant_id=None, password=PASSWORD):
 
 
 # ─── Escenarios listos para usar ──────────────────────────────────────────────
+_CTX = {}
+
+
+def detalle_para_total(total):
+    """Detalle de entrega que respalda `total` con la soda del catalogo de la empresa A
+    ($800 c/u, no retornable): desde BUG-18 un total positivo exige items que lo justifiquen."""
+    if not total or total <= 0:
+        return {}
+    cantidad = int(-(-total // 800))
+    return {str(_CTX["soda_a_id"]): {"entregado": cantidad}}
+
+
 class Mundo:
     """Dos empresas, cada una con admin, repartidor y datos propios."""
 
@@ -217,6 +229,7 @@ def mundo(db, client):
     m.envase_a = crear_envase(db, m.ta.id, "BID20", "Bidón 20L", 1500.0)
     m.agua_a = crear_producto(db, m.ta.id, "AGUA20", "Agua 20L", 3500.0, True, m.envase_a.id)
     m.soda_a = crear_producto(db, m.ta.id, "SODA1", "Soda 1L", 800.0, False)
+    _CTX["soda_a_id"] = m.soda_a.id
     # Catálogo de B
     m.envase_b = crear_envase(db, m.tb.id, "SIF", "Sifón", 900.0)
     m.soda_b = crear_producto(db, m.tb.id, "SODAB", "Soda B", 700.0, True, m.envase_b.id)

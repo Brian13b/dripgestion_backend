@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, Enum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, Enum, UniqueConstraint, Boolean, false
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -48,3 +48,7 @@ class Movimiento(Base):
     observacion = Column(String, nullable=True)
 
     idempotency_key = Column(String(64), nullable=True)
+
+    # Visita excepcional: entrega a un cliente que NO esta en el recorrido sobre el que
+    # se registra. Queda marcada para verla en el historial y en la auditoria de caja.
+    visita_excepcional = Column(Boolean, nullable=False, default=False, server_default=false())

@@ -36,7 +36,7 @@ fallo ("XPASS strict") para que se quite el decorador.
 | `test_usuarios.py` | Equipo: listado, alta, edición, desactivación, reseteo de contraseña, baja, cierre remoto de sesiones. |
 | `test_clientes.py` | Alta con usuario de portal y PIN hasheado, duplicados, paginación, ficha con envases y valor de reposición, cambio de teléfono/PIN, baja, validaciones. |
 | `test_productos.py` | Tipos de envase y productos: códigos normalizados, retornables, unidades, precios, activación, 404/422. |
-| `test_logistica.py` | Recorridos (CRUD, asignación), entregas (saldo de dinero, envases retornables, devoluciones, atomicidad/rollback), permisos del repartidor, pagos manuales, historial, filtros y cierre de caja mensual. |
+| `test_logistica.py` | Recorridos (CRUD, asignación), visita excepcional (BUG-17: marca, historial/caja, aislamiento por empresa), detalle vacío (BUG-18), códigos 403/404 (BUG-20), entregas (saldo de dinero, envases retornables, devoluciones, atomicidad/rollback), permisos del repartidor, pagos manuales, historial, filtros y cierre de caja mensual. |
 | `test_dashboard_portal.py` | KPIs, envases por tipo, métodos de pago, rendimiento por recorrido, comparativo de meses; portal del cliente (saldo, envases, últimos movimientos). |
 | `test_tenants.py` | Info pública, alta de empresa + admin, suspensión/reactivación (cierra sesiones), branding, subida de logo (formato, tamaño, permisos, falla de Cloudinary mockeada). |
 | `test_salud_y_seguridad.py` | `/`, `/health`, OpenAPI, CORS, superadmin inicial. |

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
+from app.core import branding
 from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.api import deps
@@ -15,6 +16,7 @@ MAGIC_NUMBERS = {
     "jpeg": b"\xff\xd8\xff",
     "jpg": b"\xff\xd8\xff",
 }
+
 
 router = APIRouter()
 
@@ -117,7 +119,7 @@ def crear_empresa_con_admin(data: TenantOnboardingCreate, db: Session = Depends(
       nombre=data.nombre,
       subdominio=data.subdominio.lower().strip(),
       whatsapp=data.whatsapp,
-      color_primario=data.color_primario or "#25A7DA",
+      color_primario=data.color_primario or branding.COLOR_PRIMARIO,
       is_active=True,
   )
   db.add(nuevo_tenant)

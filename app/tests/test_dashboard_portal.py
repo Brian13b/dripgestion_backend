@@ -1,11 +1,11 @@
 """Dashboard de métricas (admin) y portal del cliente."""
-from app.tests.conftest import bug, crear_cliente_db, crear_envase, crear_recorrido_db, login
+from app.tests.conftest import bug, detalle_para_total, crear_cliente_db, crear_envase, crear_recorrido_db, login
 
 API = "/api/v1"
 
 
 def mov(cliente_id, total, cobrado, metodo="efectivo", detalles=None, **extra):
-    return {"cliente_id": cliente_id, "detalles": detalles or {}, "monto_total": total, "monto_cobrado": cobrado, "metodo_pago": metodo, **extra}
+    return {"cliente_id": cliente_id, "detalles": detalles or detalle_para_total(total), "monto_total": total, "monto_cobrado": cobrado, "metodo_pago": metodo, **extra}
 
 
 def dash(mundo, query=""):
