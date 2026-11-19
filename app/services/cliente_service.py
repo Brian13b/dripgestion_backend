@@ -1,10 +1,15 @@
 from app.core import security
 from app.crud import crud_cliente
 from app.models.cliente import Cliente
+from app.models.logistica import Movimiento
 from app.models.producto import TipoEnvase
 from app.models.user import User, UserRole
 from app.schemas.cliente import ClienteCreate
 from sqlalchemy.orm import Session
+
+class ClienteConHistorialError(ValueError):
+  """El cliente tiene movimientos: borrarlo rompería el historial contable."""
+
 
 def _enriquecer_envases_cliente(
     cliente: Cliente, mapa_envases: dict[str, TipoEnvase]
@@ -160,6 +165,18 @@ def eliminar_cliente(db: Session, cliente_id: int, tenant_id: int):
   )
   if not cliente:
     raise ValueError("Cliente no encontrado")
+
+  tiene_historial = (
+      db.query(Movimiento.id)
+      .filter(Movimiento.cliente_id == cliente.id, Movimiento.tenant_id == tenant_id)
+      .first()
+      is not None
+  )
+  if tiene_historial:
+    raise ClienteConHistorialError(
+        "No se puede eliminar: el cliente tiene movimientos registrados y su "
+        "historial se conserva para la auditoría de caja."
+    )
 
   usuario = (
       db.query(User).filter(User.id == cliente.user_id).first()

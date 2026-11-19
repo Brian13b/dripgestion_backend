@@ -113,11 +113,6 @@ def crear_empresa_con_admin(data: TenantOnboardingCreate, db: Session = Depends(
         status_code=400, detail="Ese subdominio ya está registrado"
     )
 
-  if db.query(User).filter(User.username == data.admin_username).first():
-    raise HTTPException(
-        status_code=400, detail="Ese nombre de usuario ya está en uso"
-    )
-
   nuevo_tenant = Tenant(
       nombre=data.nombre,
       subdominio=data.subdominio.lower().strip(),

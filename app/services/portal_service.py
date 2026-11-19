@@ -1,3 +1,4 @@
+from app.core.timezone import a_local
 from app.crud import crud_portal
 from sqlalchemy.orm import Session
 
@@ -58,7 +59,7 @@ def obtener_datos_mi_cuenta(db: Session, user_id: int, tenant_id: int):
     texto_productos = (
         " + ".join(detalles_texto) if detalles_texto else "Solo cobro"
     )
-    fecha_str = mov.fecha.strftime("%d/%m/%Y")
+    fecha_str = a_local(mov.fecha).strftime("%d/%m/%Y")
     metodo = getattr(mov.metodo_pago, "value", mov.metodo_pago)
     monto_mostrar = (
         mov.monto_total if metodo == "cta_corriente" else mov.monto_cobrado

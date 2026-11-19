@@ -1,9 +1,10 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date
 from app import schemas, models
 from app.api import deps
+from app.core.timezone import hoy_local
 from app.db.session import get_db
 from app.schemas.logistica import PagoManualCreate, RecorridoAsignarRepartidor
 from app.services import logistica_service
@@ -16,11 +17,11 @@ def create_recorrido(recorrido_in: schemas.RecorridoCreate, db: Session = Depend
     return crud_logistica.create_recorrido(db, recorrido_in.model_dump(), current_admin.tenant_id)
 
 @router.get("/recorridos", response_model=List[schemas.RecorridoResponse])
-def get_recorridos(db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
+def get_recorridos(db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_staff)):
     return crud_logistica.get_recorridos_smart(db, current_user)
 
 @router.get("/recorridos/{recorrido_id}", response_model=schemas.RecorridoResponse)
-def get_recorrido_by_id(recorrido_id: int, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
+def get_recorrido_by_id(recorrido_id: int, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_staff)):
     recorrido = crud_logistica.get_recorrido(db, recorrido_id, current_user.tenant_id)
     if not recorrido:
         raise HTTPException(status_code=404, detail="Recorrido no encontrado")
@@ -68,30 +69,29 @@ def delete_recorrido(recorrido_id: int, db: Session = Depends(get_db), current_a
     return {"message": "Recorrido eliminado exitosamente"}
 
 @router.post("/movimientos")
-def registrar_movimiento(mov_in: schemas.MovimientoCreate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
-    if current_user.role == models.user.UserRole.CLIENTE:
-        raise HTTPException(status_code=403, detail="Los clientes no pueden registrar movimientos")
+def registrar_movimiento(mov_in: schemas.MovimientoCreate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_staff), idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", min_length=8, max_length=64)):
+    """Con el header `Idempotency-Key` (UUID) un reintento NO duplica la entrega."""
     try:
-        return logistica_service.registrar_entrega(db, mov_in, current_user, current_user.tenant_id)
+        return logistica_service.registrar_entrega(db, mov_in, current_user, current_user.tenant_id, idempotency_key)
+    except logistica_service.ClaveIdempotenciaReutilizada as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/movimientos/pago/{cliente_id}")
-def registrar_pago_manual(cliente_id: int, pago_in: PagoManualCreate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
-    if current_user.role == models.user.UserRole.CLIENTE:
-        raise HTTPException(status_code=403, detail="Los clientes no pueden registrar pagos")
+def registrar_pago_manual(cliente_id: int, pago_in: PagoManualCreate, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_staff), idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", min_length=8, max_length=64)):
+    """Con el header `Idempotency-Key` (UUID) un reintento NO duplica el pago."""
     try:
-        return logistica_service.registrar_pago_manual(db, cliente_id, pago_in, current_user, current_user.tenant_id)
+        return logistica_service.registrar_pago_manual(db, cliente_id, pago_in, current_user, current_user.tenant_id, idempotency_key)
+    except logistica_service.ClaveIdempotenciaReutilizada as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 @router.get("/historial")
-def get_historial_por_fecha(fecha: Optional[date] = None, chofer_id: Optional[int] = None, recorrido_id: Optional[int] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_user)):
-    if current_user.role == models.user.UserRole.CLIENTE:
-        raise HTTPException(status_code=403, detail="Acceso no permitido")
-
+def get_historial_por_fecha(fecha: Optional[date] = None, chofer_id: Optional[int] = None, recorrido_id: Optional[int] = None, db: Session = Depends(get_db), current_user: models.user.User = Depends(deps.get_current_staff)):
     if not fecha:
-        fecha = date.today()
+        fecha = hoy_local()
 
     if current_user.role == models.user.UserRole.REPARTIDOR:
         chofer_id = current_user.id

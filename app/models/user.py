@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Enum
+from sqlalchemy import Boolean, Column, Enum, Index, Integer, String, UniqueConstraint, text
 from app.db.base import Base
 import enum
 from sqlalchemy.orm import validates
@@ -19,11 +19,24 @@ class UserRole(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        # El username es único POR EMPRESA (el mismo teléfono puede ser cliente en
+        # dos distribuidoras). Para el superadmin (tenant_id NULL) la unicidad
+        # se garantiza con un índice parcial, porque NULL no compara igual en SQL.
+        UniqueConstraint("tenant_id", "username", name="uq_users_tenant_username"),
+        Index(
+            "uq_users_superadmin_username",
+            "username",
+            unique=True,
+            postgresql_where=text("tenant_id IS NULL"),
+            sqlite_where=text("tenant_id IS NULL"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, index=True, nullable=True)
     
-    username = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     
     role = Column(

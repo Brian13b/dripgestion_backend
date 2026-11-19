@@ -1,5 +1,6 @@
 from datetime import date
 from typing import Any
+from app.core.timezone import hoy_local
 from app.crud import crud_dashboard
 from app.models.producto import TipoEnvase
 from app.models.user import UserRole
@@ -9,7 +10,7 @@ def obtener_metricas_dashboard(
     db: Session, user: Any, mes_a=None, anio_a=None, mes_b=None, anio_b=None
 ):
   tenant_id = user.tenant_id
-  hoy = date.today()
+  hoy = hoy_local()
 
   m_a = int(mes_a) if mes_a else hoy.month
   a_a = int(anio_a) if anio_a else hoy.year
@@ -97,13 +98,13 @@ def obtener_metricas_dashboard(
     )
 
     grafico_metodos = [
-        {"name": "Efectivo", "value": pagos_efectivo, "color": "#10b981"},
+        {"name": "Efectivo", "value": round(pagos_efectivo, 2), "color": "#10b981"},
         {
             "name": "Transferencias",
-            "value": pagos_transferencia,
+            "value": round(pagos_transferencia, 2),
             "color": "#25A7DA",
         },
-        {"name": "A Cuenta", "value": pagos_fiado, "color": "#f97316"},
+        {"name": "A Cuenta", "value": round(pagos_fiado, 2), "color": "#f97316"},
     ]
 
     datos_anuales = crud_dashboard.get_recaudacion_anual(db, tenant_id, a_a)
@@ -178,9 +179,9 @@ def obtener_metricas_dashboard(
           "clientes_activos": total_clientes,
           "total_envases": total_envases,
           "valor_envases_calle": round(valor_envases_calle, 2),
-          "deuda_en_calle": float(saldos_pendientes),
-          "recaudacion_hoy": float(recaudacion_hoy),
-          "recaudacion_mes": float(total_recaudado_mes),
+          "deuda_en_calle": round(float(saldos_pendientes), 2),
+          "recaudacion_hoy": round(float(recaudacion_hoy), 2),
+          "recaudacion_mes": round(float(total_recaudado_mes), 2),
           "entregas_mes": entregas_mes,
       },
       "envases_por_tipo": envases_por_tipo,

@@ -9,8 +9,32 @@ from app.crud import crud_user
 from app.models.user import User, UserRole
 from app.schemas.user import PasswordUpdate
 
+def _buscar_usuario_para_login(db: Session, username: str, tenant_id: Optional[int]):
+  """El username es único por empresa: se busca dentro de la empresa indicada
+  y, si no está, entre los superadmin (que no pertenecen a ninguna empresa)."""
+  username = username.strip()
+  if tenant_id:
+    user = (
+        db.query(User)
+        .filter(User.username == username, User.tenant_id == tenant_id)
+        .first()
+    )
+    if user:
+      return user
+
+  return (
+      db.query(User)
+      .filter(
+          User.username == username,
+          User.tenant_id.is_(None),
+          User.role == UserRole.SUPERADMIN,
+      )
+      .first()
+  )
+
+
 def autenticar_usuario(db: Session, username: str, password: str, tenant_id: Optional[int] = None) -> User:
-  user = db.query(User).filter(User.username == username.strip()).first()
+  user = _buscar_usuario_para_login(db, username, tenant_id)
 
   if not user or not security.verify_password(password, user.hashed_password):
     raise ValueError("Credenciales incorrectas")

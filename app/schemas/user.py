@@ -10,7 +10,9 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
-    tenant_id: int 
+    # La empresa se toma SIEMPRE del admin autenticado; este campo, si llega, se ignora.
+    tenant_id: Optional[int] = None
+    role: UserRole = UserRole.REPARTIDOR
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
