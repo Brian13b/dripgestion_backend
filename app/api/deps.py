@@ -68,6 +68,22 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(reusabl
     
     return user
 
+def get_current_staff(
+    current_user: models.user.User = Depends(get_current_user)
+) -> models.user.User:
+    """Personal de la empresa (admin o repartidor). Excluye a los usuarios con
+    rol CLIENTE (portal) y al superadmin, que no opera datos de una empresa."""
+    if current_user.role not in [
+        models.user.UserRole.ADMIN,
+        models.user.UserRole.REPARTIDOR,
+    ]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tenés permiso para realizar esta acción",
+        )
+    return current_user
+
+
 def get_current_admin(
     current_user: models.user.User = Depends(get_current_user)
 ) -> models.user.User:

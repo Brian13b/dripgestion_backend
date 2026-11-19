@@ -69,6 +69,13 @@ def test_flujo_completo_entrega_y_saldo():
             db.commit()
             db.refresh(user)
 
+        # El detalle de la entrega usa el producto ID 1: antes dependía de que
+        # existiera en la base de desarrollo; ahora el test lo crea (es hermético).
+        from app.models.producto import Producto
+        if not db.query(Producto).filter(Producto.id == 1).first():
+            db.add(Producto(id=1, tenant_id=1, nombre="Agua 20L", codigo="AGUA20", precio_actual=2500.0))
+            db.commit()
+
         # 2. Inyectar el usuario para saltar la autenticación
         def override_get_user():
             return user

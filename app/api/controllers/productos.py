@@ -15,7 +15,7 @@ router = APIRouter()
 def get_tipos_envase(
     solo_activos: bool = False,
     db: Session = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
+    current_user: User = Depends(deps.get_current_staff),
 ):
   return crud_producto.get_tipos_envase_by_tenant(
       db, current_user.tenant_id, solo_activos=solo_activos
@@ -71,7 +71,7 @@ def toggle_tipo_envase(
 @router.get("", response_model=list[ProductoResponse])
 def get_productos(
     db: Session = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
+    current_user: User = Depends(deps.get_current_staff),
 ):
   return crud_producto.get_productos_by_tenant(db, current_user.tenant_id)
 

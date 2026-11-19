@@ -96,10 +96,21 @@ def registrar_entrega(
     )
     mapa_productos = {str(p.id): p for p in productos_db}
 
+    subtotal_catalogo = 0.0
+
     for producto_id, cant in mov_in.detalles.items():
       producto = mapa_productos.get(str(producto_id))
       if not producto:
         raise ValueError(f"Producto ID {producto_id} no encontrado en esta empresa")
+
+      if isinstance(cant, dict):
+        entregado = int(cant.get("entregado", 0))
+        devuelto = int(cant.get("devuelto", 0))
+      else:
+        entregado = int(cant)
+        devuelto = 0
+
+      subtotal_catalogo += (producto.precio_actual or 0.0) * entregado
 
       # Solo los productos retornables con tipo_envase_id modifican el saldo de envases
       if not producto.es_retornable or not producto.tipo_envase_id:
@@ -109,15 +120,15 @@ def registrar_entrega(
       if clave_envase not in stock_actualizado:
         stock_actualizado[clave_envase] = 0
 
-      if isinstance(cant, dict):
-        entregado = int(cant.get("entregado", 0))
-        devuelto = int(cant.get("devuelto", 0))
-      else:
-        entregado = int(cant)
-        devuelto = 0
-
       nuevo_saldo_envase = stock_actualizado[clave_envase] + (entregado - devuelto)
       stock_actualizado[clave_envase] = max(0, nuevo_saldo_envase)
+
+    # El total nunca puede superar el valor de lo entregado según el catálogo
+    # (sí puede ser menor: descuentos). Se valida solo si hay productos en el detalle.
+    if mov_in.detalles and mov_in.monto_total > subtotal_catalogo + 0.01:
+      raise ValueError(
+          "El total no puede superar el valor de los productos entregados según el catálogo"
+      )
 
     # Devoluciones directas por tipo_envase_id (ej. retiro de envases vacíos sin compra)
     if mov_in.devoluciones_envases:

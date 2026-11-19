@@ -1,10 +1,21 @@
 from sqlalchemy.orm import Session
 from app.crud import crud_user
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
 from fastapi import HTTPException, status
 
+# Roles que un administrador de empresa puede asignar. SUPERADMIN y CLIENTE quedan afuera:
+# el superadmin es del sistema y los clientes se crean desde el módulo de clientes.
+ROLES_ASIGNABLES = {UserRole.ADMIN, UserRole.REPARTIDOR}
+
+
+def _validar_rol_asignable(role):
+    if role is not None and role not in ROLES_ASIGNABLES:
+        raise ValueError("Rol no permitido: solo se puede asignar administrador o repartidor.")
+
+
 def crear_nuevo_usuario(db: Session, user_in: UserCreate, tenant_id: int):
+    _validar_rol_asignable(user_in.role)
     user_existente = crud_user.get_user_by_username(db, user_in.username, tenant_id)
     if user_existente:
         raise ValueError("El nombre de usuario ya está registrado en esta empresa.")
@@ -15,12 +26,15 @@ def listar_usuarios(db: Session, tenant_id: int):
     return crud_user.get_users_by_tenant(db, tenant_id)
 
 def obtener_por_id(db: Session, user_id: int, tenant_id: int):
+    # Los usuarios con rol CLIENTE (portal) no forman parte del equipo.
     return db.query(User).filter(
-        User.id == user_id, 
-        User.tenant_id == tenant_id
+        User.id == user_id,
+        User.tenant_id == tenant_id,
+        User.role != UserRole.CLIENTE,
     ).first()
 
 def actualizar_usuario(db: Session, user_id: int, user_in: UserUpdate, tenant_id: int):
+    _validar_rol_asignable(user_in.role)
     user_existente = crud_user.get_user_by_username(db, user_in.username, tenant_id)
     if user_existente and user_existente.id != user_id:
         raise ValueError("El nombre de usuario ya está siendo usado por otro miembro.")

@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
     FIRST_SUPERADMIN_USER: str = "gb_soluciones_digitales"
-    FIRST_SUPERADMIN_PASSWORD: str = "Superadmin123!"
+    # Sin valor por defecto: si no se define, NO se crea el superadmin inicial.
+    FIRST_SUPERADMIN_PASSWORD: Optional[str] = None
 
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
     CLOUDINARY_API_KEY: Optional[str] = None

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from app.models.logistica import MetodoPago
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 class RecorridoBase(BaseModel):
   nombre: str
@@ -35,10 +35,36 @@ class MovimientoCreate(BaseModel):
 
   devoluciones_envases: Optional[Dict[str, int]] = None
 
-  monto_total: float
-  monto_cobrado: float
+  monto_total: float = Field(ge=0)
+  monto_cobrado: float = Field(ge=0)
   metodo_pago: MetodoPago
   observacion: Optional[str] = None
+
+  @field_validator("devoluciones_envases")
+  @classmethod
+  def _devoluciones_no_negativas(cls, v):
+    if v and any(cant < 0 for cant in v.values()):
+      raise ValueError("Las cantidades de envases devueltos no pueden ser negativas")
+    return v
+
+  @field_validator("detalles")
+  @classmethod
+  def _detalles_validos(cls, v):
+    """Cada producto debe traer cantidades numéricas enteras y no negativas."""
+    for producto_id, cant in v.items():
+      valores = (
+          [cant.get("entregado", 0), cant.get("devuelto", 0)]
+          if isinstance(cant, dict)
+          else [cant]
+      )
+      for valor in valores:
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+          raise ValueError(f"Cantidad inválida para el producto {producto_id}")
+        if valor < 0 or int(valor) != valor:
+          raise ValueError(
+              f"La cantidad del producto {producto_id} debe ser un entero mayor o igual a 0"
+          )
+    return v
 
 class MovimientoResponse(MovimientoCreate):
   id: int
@@ -49,6 +75,6 @@ class MovimientoResponse(MovimientoCreate):
     from_attributes = True
 
 class PagoManualCreate(BaseModel):
-  monto: float
+  monto: float = Field(gt=0)
   metodo_pago: str
   observacion: str = ""
